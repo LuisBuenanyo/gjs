@@ -113,6 +113,7 @@ libgjs_la_SOURCES =		\
 	gjs/gi.h		\
 	gjs/gi.cpp		\
 	gjs/coverage.cpp \
+	gjs/debugger.cpp \
 	gjs/jsapi-private.cpp	\
 	gjs/jsapi-util.cpp	\
 	gjs/jsapi-dynamic-class.cpp \

@@ -21,5 +21,6 @@
 #define GJS_TESTS_ADD_FUNCS_H
 
 void gjs_test_add_tests_for_coverage ();
+void gjs_test_add_tests_for_debugger ();
 
 #endif

@@ -25,23 +25,30 @@
 const GObject = imports.gi.GObject;
 const Lang = imports.lang;
 
-function BreakpointHandle(multiplexer, filename, line) {
+function _DebugMultiplexerLockHolder(multiplexer, unregisterFunc) {
+    this._active = true;
     this.unregister = function() {
-        
+        if (this._active) {
+            unregisterFunc.call(multiplexer);
+            this.active = false;
+        }
     }
 }
 
-function SingleStepLockHolder(multiplexer) {
-    this.unregister = function() {
-        multiplexer._unregisterSingleStepLockHolder();
+function _CreateMultiplexerLockHolder(unregisterFuncName) {
+    let _lockHolderPrototype = function(multiplexer) {
+        _DebugMultiplexerLockHolder.call(this,
+                                         multiplexer,
+                                         multiplexer[unregisterFuncName]);
     }
+
+    _lockHolderPrototype.prototype = Object.create(_DebugMultiplexerLockHolder.prototype);
+    _lockHolderPrototype.prototype.constructor = _lockHolderPrototype;
+
+    return _lockHolderPrototype;
 }
 
-function EnterFrameLockHolder(multiplexer) {
-    this.unregister = function() {
-        multiplexer._unregisterEnterFrameLockHolder();
-    }
-}
+const _EnterFrameLockHolder = _CreateMultiplexerLockHolder("_unregisterEnterFrameLockHolder")
 
 /* This script could be eval'd multiple times, but there's no
  * way to unregister GType classes once they've been registered.
@@ -88,29 +95,32 @@ const DebuggerMultiplexer = new Lang.Class({
     },
     
     enableFrameEntry: function(callback) {
-        if (this._enter_frame_lock_count === 0) {
+
+        /* Do all this before setting onEnterFrame to avoid
+         * spurious onEnterFrame calls */
+        this._enter_frame_lock_count++;
+        this.connect('enter-frame', callback);
+
+        let lock = new _EnterFrameLockHolder(this);
+
+        if (this._enter_frame_lock_count === 1) {
             this._dbg.onEnterFrame = Lang.bind(this, function(frame) {
-                this.emit('enter-frame', frame.callee ? (frame.callee.name ? frame.callee.name : "(anonymous)") : "(toplevel)", frame.script.url);
+                let name = frame.callee ? (frame.callee.name ? frame.callee.name : "(anonymous)") : "(toplevel)"
+                this.emit('enter-frame', name, frame.script.url);
             });
         }
 
-        this._enter_frame_lock_count++;
-        this.connect('enter-frame', callback);
+        return lock;
     },
 
     _unregisterBreakpointHandler: function(filename, line) {
         this._breakpointer_handlers[filename + ":" + line] = undefined;
     },
     
-    _unregisterEnterFrameLockHolder: function(filename, line) {
+    _unregisterEnterFrameLockHolder: function() {
         this._enter_frame_lock_count--;
         if (this._enter_frame_lock_count === 0) {
-        }
-    },
-
-    _unregisterSingleStepLockHolder: function(filename, line) {
-        this._enter_frame_lock_count--;
-        if (this._enter_frame_lock_count === 0) {
+            this._dbg.onEnterFrame = undefined;
         }
     },
 });

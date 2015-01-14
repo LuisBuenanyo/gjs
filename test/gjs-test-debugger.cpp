@@ -138,7 +138,7 @@ gjs_debugger_fixture_set_up(gpointer      fixture_data,
     GjsDebuggerFixture *fixture = (GjsDebuggerFixture *) fixture_data;
     const char         *js_script = "function f () { return 1; }\n";
 
-    fixture->temporary_js_script_directory_name = g_strdup("/tmp/gjs_coverage_tmp.XXXXXX");
+    fixture->temporary_js_script_directory_name = g_strdup("/tmp/gjs_debugger_tmp.XXXXXX");
     fixture->temporary_js_script_directory_name =
         mkdtemp (fixture->temporary_js_script_directory_name);
 
@@ -147,7 +147,7 @@ gjs_debugger_fixture_set_up(gpointer      fixture_data,
 
     fixture->temporary_js_script_filename = g_strconcat(fixture->temporary_js_script_directory_name,
                                                         "/",
-                                                        "gjs_coverage_script_XXXXXX.js",
+                                                        "gjs_debugger_script.XXXXXX.js",
                                                         NULL);
     fixture->temporary_js_script_open_handle =
         mkstemps(fixture->temporary_js_script_filename, 3);
@@ -168,9 +168,15 @@ gjs_debugger_fixture_set_up(gpointer      fixture_data,
 
     write_to_file(fixture->temporary_js_script_open_handle, js_script);
 
+    char *prologue = g_strdup_printf("const JSUnit = imports.jsUnit;\n"
+                                     "let __script_name = '%s'\n",
+                                     fixture->temporary_js_script_filename);
+
     run_script_in_debugger_compartment(fixture->context,
                                        fixture->debugger_compartment,
-                                       "const JSUnit = imports.jsUnit;\n");
+                                       prologue);
+
+    g_free (prologue);
 }
 
 static void
@@ -211,8 +217,9 @@ test_debugger_got_enter_frame_notify(gpointer fixture_data,
                                        fixture->debugger_compartment,
                                        "let multiplexer = new DebuggerMultiplexer();\n"
                                        "let frameEntryHappened = false;\n"
-                                       "let frameEntryReference = multiplexer.enableFrameEntry(function() {\n"
-                                       "    frameEntryHappened = true;\n"
+                                       "let frameEntryReference = multiplexer.enableFrameEntry(function(object, caller, url) {\n"
+                                       "    if (url === __script_name)\n"
+                                       "        frameEntryHappened = true;\n"
                                        "});\n");
     run_script_file_in_main_compartment(fixture->context,
                                         fixture->temporary_js_script_filename);

@@ -22,106 +22,119 @@
  * Authored By: Sam Spilsbury <sam@endlessm.com>
  */
 
-const GObject = imports.gi.GObject;
-const Lang = imports.lang;
+const __debugger = new Debugger(debuggee);
 
-function _DebugMultiplexerLockHolder(multiplexer, unregisterFunc) {
-    this._active = true;
-    this.unregister = function() {
-        if (this._active) {
-            unregisterFunc.call(multiplexer);
-            this.active = false;
-        }
+function _copyProperties(properties, from, to) {
+    for (let prop of properties) {
+        if (!from.hasOwnProperty(prop))
+            throw new Error("Assertion failure: required property " + required);
+        to[prop] = from[prop];
     }
 }
 
-function _CreateMultiplexerLockHolder(unregisterFuncName) {
-    let _lockHolderPrototype = function(multiplexer) {
-        _DebugMultiplexerLockHolder.call(this,
-                                         multiplexer,
-                                         multiplexer[unregisterFuncName]);
-    }
-
-    _lockHolderPrototype.prototype = Object.create(_DebugMultiplexerLockHolder.prototype);
-    _lockHolderPrototype.prototype.constructor = _lockHolderPrototype;
-
-    return _lockHolderPrototype;
+function _StopInfo(infoProperties) {
+    _copyProperties(['what', 'url', 'line', 'func'],
+                    infoProperties,
+                    this);
 }
 
-const _EnterFrameLockHolder = _CreateMultiplexerLockHolder("_unregisterEnterFrameLockHolder")
+function _createStopInfoForFrame(what, frame) {
+    let name = frame.callee ? (frame.callee.name ? frame.callee.name : "(anonymous)") : "(toplevel)";
 
-/* This script could be eval'd multiple times, but there's no
- * way to unregister GType classes once they've been registered.
- * So scan for GType names until we find one that isn't valid */
-let classNumber = 0;
-let className = null;
-while (1) {
-    let name = 'DebuggerMultiplexer' + classNumber;
-    let type = GObject.type_from_name('Gjs' + name);
-    if (type.name === null) {
-        className = name;
-        break;
-    }
-    classNumber++;
+    return new _StopInfo({
+        what: what,
+        url: frame.script.url,
+        line: frame.script.getOffsetLine(frame.offset),
+        func: name
+    })
 }
 
-/* We have to do this while we don't have any frames on the stack */
-let __debugger = new Debugger(debuggee);
+function DebuggerCommandController(onStop) {
 
-const DebuggerMultiplexer = new Lang.Class({
-    Name: className,
-    GTypeName: 'Gjs' + className,
-    Extends: GObject.Object,
-    Signals: {
-        'single-step': { param_types: [ GObject.TYPE_INT, GObject.TYPE_STRING ] },
-        'enter-frame': { param_types: [ GObject.TYPE_STRING, GObject.TYPE_STRING ] }
-    },
-    
-    _init: function(props) {
-        this.parent(props);
+    /* Some matchers. If a command satisfies the matcher property
+     * then recurse into the value properties or apply th
+     * remaining arguments to the function */
+    const Exactly = function(node, array) {
+        if (array.length > 0)
+            return array[0] === node;
+        return false;
+    };
 
-        this._breakpoint_handlers = {}
-        this._dbg = __debugger;
+    const NoneRemaining = function(node, array) {
+        return array.length === 0;
+    };
 
-        this._enter_frame_lock_count = 0;
-        this._single_step_lock_count = 0;
-        this._breakpoint_handlers = {};
-    },
+    /* Handlers for various debugger actions */
+    const onFrameEntered = function(frame) {
+        onStop(_createStopInfoForFrame('Frame entered', frame))
+        return undefined;
+    };
 
-    addBreakpointHandler: function(filename, line, callback) {
-    },
-    
-    enableSingleStep: function() {
-    },
-    
-    enableFrameEntry: function(callback) {
-
-        /* Do all this before setting onEnterFrame to avoid
-         * spurious onEnterFrame calls */
-        this._enter_frame_lock_count++;
-        this.connect('enter-frame', callback);
-
-        let lock = new _EnterFrameLockHolder(this);
-
-        if (this._enter_frame_lock_count === 1) {
-            this._dbg.onEnterFrame = Lang.bind(this, function(frame) {
-                let name = frame.callee ? (frame.callee.name ? frame.callee.name : "(anonymous)") : "(toplevel)"
-                this.emit('enter-frame', name, frame.script.url);
-            });
+    /* A map of commands to syntax tree / function. This is traversed
+     * in process(). Each property name in a tree corresponds to a
+     * matcher name defined in matchers. If, upon calling the function
+     * specified by that name, the result is true, then continue to
+     * traverse the tree. If the value is an object, then it is
+     * traversed as a sub-tree with the front of the array popped
+     * off. If it is a function, then the function is applied to
+     * the array */
+    const commands = {
+        step: {
+            match: Exactly,
+            tree: {
+                frame: {
+                    match: Exactly,
+                    tree: {
+                        _: {
+                            match: NoneRemaining,
+                            func: function() {
+                                __debugger.onEnterFrame = onFrameEntered;
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        disable: {
+            match: Exactly,
+            tree: {
+                step: {
+                    match: Exactly,
+                    tree: {
+                        frame: {
+                            match: Exactly,
+                            tree: {
+                                _: {
+                                    match: NoneRemaining,
+                                    func: function() {
+                                        __debugger.onEnterFrame = undefined;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
+    };
 
-        return lock;
-    },
+    const process = function(tree, commandArray) {
+        Object.keys(tree).forEach(function(key) {
+            if (tree[key].match(key, commandArray)) {
+                let remainingCommands = commandArray;
+                remainingCommands.shift();
+                /* There's a tree on this node, recurse into that tree */
+                if (tree[key].hasOwnProperty('tree')) {
+                    process(tree[key].tree, remainingCommands);
+                } else if (tree[key].hasOwnProperty('func')) {
+                    /* Apply the function to the remaining arguments */
+                    tree[key].func.apply(this, remainingCommands);
+                }
+            }
+        })
+    };
 
-    _unregisterBreakpointHandler: function(filename, line) {
-        this._breakpointer_handlers[filename + ":" + line] = undefined;
-    },
-    
-    _unregisterEnterFrameLockHolder: function() {
-        this._enter_frame_lock_count--;
-        if (this._enter_frame_lock_count === 0) {
-            this._dbg.onEnterFrame = undefined;
-        }
-    },
-});
-    
+    this.handleInput = function(inputArray) {
+        process(commands, inputArray);
+    }
+}

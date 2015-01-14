@@ -39,14 +39,6 @@
 
 JSObject * gjs_get_debugger_compartment(GjsContext *gjs_context); /* The truth is that I'm just a lazy bugger */
 
-typedef struct _GjsDebuggerFixture {
-    GjsContext           *context;
-    JS::Heap<JSObject *>  debugger_compartment;
-    char                 *temporary_js_script_directory_name;
-    char                 *temporary_js_script_filename;
-    int                   temporary_js_script_open_handle;
-} GjsDebuggerFixture;
-
 static void
 write_to_file(int        handle,
               const char *contents)
@@ -131,6 +123,14 @@ run_script_file_in_main_compartment(GjsContext       *context,
     g_assert_no_error(error);
 }
 
+typedef struct _GjsDebuggerFixture {
+    GjsContext           *context;
+    JS::Heap<JSObject *>  debugger_compartment;
+    char                 *temporary_js_script_directory_name;
+    char                 *temporary_js_script_filename;
+    int                   temporary_js_script_open_handle;
+} GjsDebuggerFixture;
+
 static void
 gjs_debugger_fixture_set_up(gpointer      fixture_data,
                             gconstpointer user_data)
@@ -207,25 +207,77 @@ test_debugger_eval_script_for_success(gpointer fixture_data,
                                         fixture->temporary_js_script_filename);
 }
 
+typedef struct _GjsDebuggerSingleHandlerFixture {
+    GjsDebuggerFixture base_fixture;
+} GjsDebuggerSingleHandlerFixture;
+
+static void
+gjs_debugger_single_handler_fixture_set_up(gpointer      fixture_data,
+                                           gconstpointer user_data)
+{
+    GjsDebuggerFixture *fixture = (GjsDebuggerFixture *) fixture_data;
+    gjs_debugger_fixture_set_up(fixture, user_data);
+
+    run_script_in_debugger_compartment(fixture->context,
+                                       fixture->debugger_compartment,
+                                       "let __event_happened = false;\n"
+                                       "let __controller = new DebuggerCommandController(function(info) {\n"
+                                       "                     if (info.url === __script_name)\n"
+                                       "                         __event_happened = true;\n"
+                                       "                 });\n");
+}
+
+static void
+gjs_debugger_single_handler_fixture_tear_down(gpointer      fixture_data,
+                                              gconstpointer user_data)
+{
+    gjs_debugger_fixture_tear_down(fixture_data, user_data);
+}
+
+static void
+run_debugger_command_list(GjsContext       *context,
+                          JS::HandleObject  debugger_compartment,
+                          const char       *debugger_command_array)
+{
+    char *subscript = g_strdup_printf("__controller.handleInput(%s);\n",
+                                      debugger_command_array);
+    run_script_in_debugger_compartment(context,
+                                       debugger_compartment,
+                                       subscript);
+    g_free(subscript);
+}
+
+static void
+assert_debugger_callback_invoked(GjsContext       *context,
+                                 JS::HandleObject  debugger_compartment)
+{
+    run_script_in_debugger_compartment(context,
+                                       debugger_compartment,
+                                       "JSUnit.assertTrue(__event_happened);\n");
+}
+
+static void
+assert_debugger_callback_not_invoked(GjsContext       *context,
+                                     JS::HandleObject  debugger_compartment)
+{
+    run_script_in_debugger_compartment(context,
+                                       debugger_compartment,
+                                       "JSUnit.assertFalse(__event_happened);\n");
+}
+
 static void
 test_debugger_got_enter_frame_notify(gpointer fixture_data,
                                      gconstpointer user_data)
 {
     GjsDebuggerFixture *fixture = (GjsDebuggerFixture *) fixture_data;
 
-    run_script_in_debugger_compartment(fixture->context,
-                                       fixture->debugger_compartment,
-                                       "let multiplexer = new DebuggerMultiplexer();\n"
-                                       "let frameEntryHappened = false;\n"
-                                       "let frameEntryReference = multiplexer.enableFrameEntry(function(object, caller, url) {\n"
-                                       "    if (url === __script_name)\n"
-                                       "        frameEntryHappened = true;\n"
-                                       "});\n");
+    run_debugger_command_list(fixture->context,
+                              fixture->debugger_compartment,
+                              "['step', 'frame']");
     run_script_file_in_main_compartment(fixture->context,
                                         fixture->temporary_js_script_filename);
-    run_script_in_debugger_compartment(fixture->context,
-                                       fixture->debugger_compartment,
-                                       "JSUnit.assertTrue(frameEntryHappened);\n");
+    assert_debugger_callback_invoked(fixture->context,
+                                     fixture->debugger_compartment);
 }
 
 static void
@@ -234,20 +286,13 @@ test_debugger_disable_frame_entry_notification(gpointer fixture_data,
 {
     GjsDebuggerFixture *fixture = (GjsDebuggerFixture *) fixture_data;
 
-    run_script_in_debugger_compartment(fixture->context,
-                                       fixture->debugger_compartment,
-                                       "let multiplexer = new DebuggerMultiplexer();\n"
-                                       "let frameEntryHappened = false;\n"
-                                       "let frameEntryReference = multiplexer.enableFrameEntry(function(caller, url) {\n"
-                                       "    if (url === __script_name)\n"
-                                       "        frameEntryHappened = true;\n"
-                                       "});\n"
-                                       "frameEntryReference.unregister();");
+    run_debugger_command_list(fixture->context,
+                              fixture->debugger_compartment,
+                              "['disable', 'step', 'frame']");
     run_script_file_in_main_compartment(fixture->context,
                                         fixture->temporary_js_script_filename);
-    run_script_in_debugger_compartment(fixture->context,
-                                       fixture->debugger_compartment,
-                                       "JSUnit.assertFalse(frameEntryHappened);\n");
+    assert_debugger_callback_not_invoked(fixture->context,
+                                         fixture->debugger_compartment);
 }
 
 typedef struct _FixturedTest {
@@ -282,12 +327,19 @@ void gjs_test_add_tests_for_debugger()
                          &debugger_fixture,
                          test_debugger_eval_script_for_success,
                          NULL);
+
+    FixturedTest debugger_single_command_fixture = {
+        sizeof(GjsDebuggerSingleHandlerFixture),
+        gjs_debugger_single_handler_fixture_set_up,
+        gjs_debugger_single_handler_fixture_tear_down
+    };
+
     add_test_for_fixture("/gjs/debugger/got_enter_frame_notify",
-                         &debugger_fixture,
+                         &debugger_single_command_fixture,
                          test_debugger_got_enter_frame_notify,
                          NULL);
     add_test_for_fixture("/gjs/debugger/disable_frame_entry_notification",
-                         &debugger_fixture,
+                         &debugger_single_command_fixture,
                          test_debugger_disable_frame_entry_notification,
                          NULL);
 }

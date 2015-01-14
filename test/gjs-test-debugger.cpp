@@ -230,9 +230,9 @@ gjs_debugger_single_handler_fixture_set_up(gpointer      fixture_data,
                                        fixture->debugger_compartment,
                                        "let __events = [];\n"
                                        "let __controller = new DebuggerCommandController(function(info) {\n"
-                                       "                     if (info.url === __script_name)\n"
-                                       "                         __events.push(info.type);\n"
-                                       "                 });\n");
+                                       "                       if (info.url === __script_name)\n"
+                                       "                           __events.push(info.type);\n"
+                                       "                   });\n");
 }
 
 static void
@@ -391,5 +391,13 @@ void gjs_test_add_tests_for_debugger()
     add_test_for_fixture("/gjs/debugger/disable_frame_entry_notification",
                          &debugger_single_command_fixture,
                          test_debugger_disable_frame_entry_notification,
+                         NULL);
+    add_test_for_fixture("/gjs/debugger/got_single_step_notify",
+                         &debugger_single_command_fixture,
+                         test_debugger_got_single_step,
+                         NULL);
+    add_test_for_fixture("/gjs/debugger/disable_single_step_notification",
+                         &debugger_single_command_fixture,
+                         test_debugger_disable_single_step,
                          NULL);
 }

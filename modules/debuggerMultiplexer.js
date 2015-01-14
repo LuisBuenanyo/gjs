@@ -22,6 +22,8 @@
  * Authored By: Sam Spilsbury <sam@endlessm.com>
  */
 
+const Lang = imports.lang;
+
 const __debugger = new Debugger(debuggee);
 
 function _copyProperties(properties, from, to) {
@@ -63,7 +65,14 @@ function _createEnum() {
     return enumObject;
 }
 
-const DebuggerEventTypes = _createEnum('FRAME_ENTERED');
+function _appendUnique(array, element) {
+    if (array.indexOf(element) === -1) {
+        array.push(element);
+    }
+}
+
+const DebuggerEventTypes = _createEnum('FRAME_ENTERED',
+                                       'SINGLE_STEP');
 
 function DebuggerCommandController(onStop) {
 
@@ -88,6 +97,14 @@ function DebuggerCommandController(onStop) {
         return undefined;
     };
 
+    const onSingleStep = function() {
+        /* 'this' inside the onSingleStep handler is the frame itself. */
+        onStop(_createStopInfoForFrame('Single step',
+                                       DebuggerEventTypes.SINGLE_STEP,
+                                       this));
+        return undefined;
+    }
+
     /* A map of commands to syntax tree / function. This is traversed
      * in process(). Each property name in a tree corresponds to a
      * matcher name defined in matchers. If, upon calling the function
@@ -110,6 +127,23 @@ function DebuggerCommandController(onStop) {
                             }
                         }
                     }
+                },
+                _: {
+                    match: NoneRemaining,
+                    func: function() {
+                        /* Set __debugger.onEnterFrame to only watch for
+                         * new scripts, upon which we will set the
+                         * onStep handler. Set the onStep handlers of
+                         * any other scripts we know about too */
+                        __debugger.onEnterFrame = Lang.bind(this, function(frame) {
+                            _appendUnique(this._trackingFrames, frame);
+                            frame.onStep = onSingleStep;
+                        });
+
+                        for (frame of this._trackingFrames) {
+                            frame.onStep = onSingleStep;
+                        }
+                    }
                 }
             }
         },
@@ -129,6 +163,16 @@ function DebuggerCommandController(onStop) {
                                     }
                                 }
                             }
+                        },
+                        _: {
+                            match: NoneRemaining,
+                            func: function() {
+                                __debugger.onEnterFrame = undefined;
+                                for (frame of this._trackingFrames) {
+                                    frame.onStep = undefined;
+                                }
+                                this._trackingFrames = [];
+                            }
                         }
                     }
                 }
@@ -136,23 +180,32 @@ function DebuggerCommandController(onStop) {
         }
     };
 
-    const process = function(tree, commandArray) {
-        Object.keys(tree).forEach(function(key) {
+    this._process = function(tree, commandArray) {
+        let commandProcessed = false;
+
+        for (let key of Object.keys(tree)) {
             if (tree[key].match(key, commandArray)) {
-                let remainingCommands = commandArray;
+                let remainingCommands = commandArray.slice();
                 remainingCommands.shift();
                 /* There's a tree on this node, recurse into that tree */
                 if (tree[key].hasOwnProperty('tree')) {
-                    process(tree[key].tree, remainingCommands);
+                    commandProcessed = this._process(tree[key].tree,
+                                                     remainingCommands);
                 } else if (tree[key].hasOwnProperty('func')) {
                     /* Apply the function to the remaining arguments */
                     tree[key].func.apply(this, remainingCommands);
+                    commandProcessed = true;
+                    break;
                 }
             }
-        })
+        }
+
+        return commandProcessed;
     };
 
+    this._trackingFrames = [];
     this.handleInput = function(inputArray) {
-        process(commands, inputArray);
+        if (!this._process(commands, inputArray))
+            warning('Could not parse command set ' + inputArray);
     }
 }

@@ -43,9 +43,27 @@ function EnterFrameLockHolder(multiplexer) {
     }
 }
 
+/* This script could be eval'd multiple times, but there's no
+ * way to unregister GType classes once they've been registered.
+ * So scan for GType names until we find one that isn't valid */
+let classNumber = 0;
+let className = null;
+while (1) {
+    let name = 'DebuggerMultiplexer' + classNumber;
+    let type = GObject.type_from_name('Gjs' + name);
+    if (type.name === null) {
+        className = name;
+        break;
+    }
+    classNumber++;
+}
+
+/* We have to do this while we don't have any frames on the stack */
+let __debugger = new Debugger(debuggee);
+
 const DebuggerMultiplexer = new Lang.Class({
-    Name: 'DebuggerMultiplexer',
-    GTypeName: 'GjsDebuggerMultiplexer',
+    Name: className,
+    GTypeName: 'Gjs' + className,
     Extends: GObject.Object,
     Signals: {
         'single-step': { param_types: [ GObject.TYPE_INT, GObject.TYPE_STRING ] },

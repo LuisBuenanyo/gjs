@@ -147,7 +147,7 @@ debugger_multiplexer_tracer(JSTracer *trc, void *data)
 } 
 
 JSObject *
-gjs_get_debugger_multiplexer(GjsContext     *gjs_context)
+gjs_get_debugger_compartment(GjsContext     *gjs_context)
 {
     static const char *debugger_multiplexer_script = "resource:///org/gnome/gjs/modules/debuggerMultiplexer.js";
     GError    *error = NULL;
@@ -212,29 +212,9 @@ gjs_get_debugger_multiplexer(GjsContext     *gjs_context)
                                   debugger_multiplexer_script,
                                   debugger_compartment,
                                   &error)) {
+        gjs_log_exception(context);
         g_error("Failed to evaluate debugger script %s", error->message);
     }
-
-    jsval debugger_multiplexer_prototype_value;
-    if (!JS_GetProperty(context, debugger_compartment, "DebuggerMultiplexer", &debugger_multiplexer_prototype_value) || !JSVAL_IS_OBJECT(debugger_multiplexer_prototype_value)) {
-        gjs_throw(context, "Failed to get DebuggerMultiplexer object");
-    }
     
-    JS::RootedObject debugger_multiplexer_constructor (context,
-                                                       JSVAL_TO_OBJECT(debugger_multiplexer_prototype_value));
-    JS::RootedObject debugger_multiplexer (context,
-                                           JS_New(context,
-                                                  debugger_multiplexer_constructor,
-                                                  0,
-                                                  NULL));
-    if (!debugger_multiplexer) {
-        gjs_throw(context, "Failed to create DebuggerMultiplexer instance");
-        return NULL;
-    }
-
-    JS_AddExtraGCRootsTracer(JS_GetRuntime(context),
-                             debugger_multiplexer_tracer,
-                             debugger_multiplexer);
-
-    return debugger_multiplexer;
+    return debugger_compartment;
 }

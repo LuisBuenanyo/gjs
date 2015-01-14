@@ -33,12 +33,15 @@
 #include <gjs/gjs.h>
 #include <gjs/coverage.h>
 #include <gjs/gjs-module.h>
+#include <util/error.h>
 
-JSObject * gjs_get_debugger_multiplexer(GjsContext *gjs_context); /* The truth is that I'm just a lazy bugger */
+#include <jsapi.h>
+
+JSObject * gjs_get_debugger_compartment(GjsContext *gjs_context); /* The truth is that I'm just a lazy bugger */
 
 typedef struct _GjsDebuggerFixture {
     GjsContext           *context;
-    JS::Heap<JSObject *>  debugger_multiplexer_object;
+    JS::Heap<JSObject *>  debugger_compartment;
     char                 *temporary_js_script_directory_name;
     char                 *temporary_js_script_filename;
     int                   temporary_js_script_open_handle;
@@ -90,6 +93,45 @@ recursive_delete_dir_at_path(const char *path)
 }
 
 static void
+run_script_in_debugger_compartment(GjsContext       *context,
+                                   JS::HandleObject  debugger_compartment,
+                                   const char       *debugger_script)
+{
+    JSContext *js_context = (JSContext *) gjs_context_get_native_context(context);
+    JSAutoRequest ar(js_context);
+    JSAutoCompartment ac(js_context, debugger_compartment);
+
+    GError *error = NULL;
+    jsval value;
+    if (!gjs_eval_with_scope(js_context,
+                             debugger_compartment,
+                             debugger_script,
+                             strlen(debugger_script),
+                             "<prelude>",
+                             &value)) {
+        gjs_log_exception(js_context);
+        g_set_error(&error, GJS_ERROR, GJS_ERROR_FAILED, "Failed to eval debugger script");
+    }
+
+    g_assert_no_error(error);
+}
+
+static void
+run_script_file_in_main_compartment(GjsContext       *context,
+                                    const char       *filename)
+{
+    JSContext *js_context = (JSContext *) gjs_context_get_native_context(context);
+    JSAutoRequest ar(js_context);
+
+    GError *error = NULL;
+    gjs_context_eval_file(context,
+                          filename,
+                          NULL,
+                          &error);
+    g_assert_no_error(error);
+}
+
+static void
 gjs_debugger_fixture_set_up(gpointer      fixture_data,
                             gconstpointer user_data)
 {
@@ -122,9 +164,13 @@ gjs_debugger_fixture_set_up(gpointer      fixture_data,
     };
 
     fixture->context = gjs_context_new_with_search_path((char **) search_paths);
-    fixture->debugger_multiplexer_object = gjs_get_debugger_multiplexer(fixture->context);
+    fixture->debugger_compartment = gjs_get_debugger_compartment(fixture->context);
 
     write_to_file(fixture->temporary_js_script_open_handle, js_script);
+
+    run_script_in_debugger_compartment(fixture->context,
+                                       fixture->debugger_compartment,
+                                       "const JSUnit = imports.jsUnit;\n");
 }
 
 static void
@@ -138,7 +184,7 @@ gjs_debugger_fixture_tear_down(gpointer      fixture_data,
     recursive_delete_dir_at_path(fixture->temporary_js_script_directory_name);
     g_free(fixture->temporary_js_script_directory_name);
 
-    fixture->debugger_multiplexer_object = NULL;
+    fixture->debugger_compartment = NULL;
     g_object_unref(fixture->context);
     gjs_clear_thread_runtime();
 }

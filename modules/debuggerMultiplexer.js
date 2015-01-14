@@ -71,9 +71,14 @@ const DebuggerMultiplexer = new Lang.Class({
     },
     
     _init: function(props) {
-         this.parent(props);
+        this.parent(props);
 
-         this._breakpoint_handlers = {}
+        this._breakpoint_handlers = {}
+        this._dbg = __debugger;
+
+        this._enter_frame_lock_count = 0;
+        this._single_step_lock_count = 0;
+        this._breakpoint_handlers = {};
     },
 
     addBreakpointHandler: function(filename, line, callback) {
@@ -82,7 +87,15 @@ const DebuggerMultiplexer = new Lang.Class({
     enableSingleStep: function() {
     },
     
-    enableFrameEntry: function() {
+    enableFrameEntry: function(callback) {
+        if (this._enter_frame_lock_count === 0) {
+            this._dbg.onEnterFrame = Lang.bind(this, function(frame) {
+                this.emit('enter-frame', frame.callee ? (frame.callee.name ? frame.callee.name : "(anonymous)") : "(toplevel)", frame.script.url);
+            });
+        }
+
+        this._enter_frame_lock_count++;
+        this.connect('enter-frame', callback);
     },
 
     _unregisterBreakpointHandler: function(filename, line) {

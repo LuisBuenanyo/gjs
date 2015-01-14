@@ -197,13 +197,28 @@ test_debugger_eval_script_for_success(gpointer fixture_data,
 
     /* Just evaluate a script (the debugger is enabled) and check that
      * it succeeds */
-    GError *error = NULL;
-    gjs_context_eval_file(fixture->context,
-                          fixture->temporary_js_script_filename,
-                          NULL,
-                          &error);
+    run_script_file_in_main_compartment(fixture->context,
+                                        fixture->temporary_js_script_filename);
+}
 
-    g_assert_no_error(error);
+static void
+test_debugger_got_enter_frame_notify(gpointer fixture_data,
+                                     gconstpointer user_data)
+{
+    GjsDebuggerFixture *fixture = (GjsDebuggerFixture *) fixture_data;
+
+    run_script_in_debugger_compartment(fixture->context,
+                                       fixture->debugger_compartment,
+                                       "let multiplexer = new DebuggerMultiplexer();\n"
+                                       "let frameEntryHappened = false;\n"
+                                       "let frameEntryReference = multiplexer.enableFrameEntry(function() {\n"
+                                       "    frameEntryHappened = true;\n"
+                                       "});\n");
+    run_script_file_in_main_compartment(fixture->context,
+                                        fixture->temporary_js_script_filename);
+    run_script_in_debugger_compartment(fixture->context,
+                                       fixture->debugger_compartment,
+                                       "JSUnit.assertTrue(frameEntryHappened);\n");
 }
 
 typedef struct _FixturedTest {
@@ -237,5 +252,9 @@ void gjs_test_add_tests_for_debugger()
     add_test_for_fixture("/gjs/debugger/evaluate_script_for_success",
                          &debugger_fixture,
                          test_debugger_eval_script_for_success,
+                         NULL);
+    add_test_for_fixture("/gjs/debugger/got_enter_frame_notify",
+                         &debugger_fixture,
+                         test_debugger_got_enter_frame_notify,
                          NULL);
 }

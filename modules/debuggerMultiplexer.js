@@ -33,21 +33,37 @@ function _copyProperties(properties, from, to) {
 }
 
 function _StopInfo(infoProperties) {
-    _copyProperties(['what', 'url', 'line', 'func'],
+    _copyProperties(['what', 'type', 'url', 'line', 'func'],
                     infoProperties,
                     this);
 }
 
-function _createStopInfoForFrame(what, frame) {
+function _createStopInfoForFrame(what, type, frame) {
     let name = frame.callee ? (frame.callee.name ? frame.callee.name : "(anonymous)") : "(toplevel)";
 
     return new _StopInfo({
         what: what,
+        type: type,
         url: frame.script.url,
         line: frame.script.getOffsetLine(frame.offset),
         func: name
     })
 }
+
+function _createEnum() {
+    const argumentsLen = arguments.length;
+    let enumObject = {};
+    let index = 0;
+
+    while (index !== arguments.length) {
+        enumObject[arguments[index]] = index;
+        index++;
+    }
+
+    return enumObject;
+}
+
+const DebuggerEventTypes = _createEnum('FRAME_ENTERED');
 
 function DebuggerCommandController(onStop) {
 
@@ -66,7 +82,9 @@ function DebuggerCommandController(onStop) {
 
     /* Handlers for various debugger actions */
     const onFrameEntered = function(frame) {
-        onStop(_createStopInfoForFrame('Frame entered', frame))
+        onStop(_createStopInfoForFrame('Frame entered',
+                                       DebuggerEventTypes.FRAME_ENTERED,
+                                       frame))
         return undefined;
     };
 

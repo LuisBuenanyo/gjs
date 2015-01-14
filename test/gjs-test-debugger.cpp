@@ -169,7 +169,15 @@ gjs_debugger_fixture_set_up(gpointer      fixture_data,
     write_to_file(fixture->temporary_js_script_open_handle, js_script);
 
     char *prologue = g_strdup_printf("const JSUnit = imports.jsUnit;\n"
-                                     "let __script_name = '%s'\n",
+                                     "let __script_name = '%s'\n"
+                                     "function assertArrayContains(array, contains) {\n"
+                                     "    if (array.indexOf(contains) === -1)\n"
+                                     "        JSUnit.fail('Array ' + array + ' does not contain ' + contains);\n"
+                                     "}\n"
+                                     "function assertArrayDoesNotContain(array, contains) {\n"
+                                     "    if (array.indexOf(contains) !== -1)\n"
+                                     "        JSUnit.fail('Array ' + array + ' contains ' + contains);\n"
+                                     "}\n",
                                      fixture->temporary_js_script_filename);
 
     run_script_in_debugger_compartment(fixture->context,
@@ -220,10 +228,10 @@ gjs_debugger_single_handler_fixture_set_up(gpointer      fixture_data,
 
     run_script_in_debugger_compartment(fixture->context,
                                        fixture->debugger_compartment,
-                                       "let __event_happened = false;\n"
+                                       "let __events = [];\n"
                                        "let __controller = new DebuggerCommandController(function(info) {\n"
                                        "                     if (info.url === __script_name)\n"
-                                       "                         __event_happened = true;\n"
+                                       "                         __events.push(info.type);\n"
                                        "                 });\n");
 }
 
@@ -248,21 +256,29 @@ run_debugger_command_list(GjsContext       *context,
 }
 
 static void
-assert_debugger_callback_invoked(GjsContext       *context,
-                                 JS::HandleObject  debugger_compartment)
+assert_debugger_got_event(GjsContext       *context,
+                          JS::HandleObject  debugger_compartment,
+                          const char       *event_type)
 {
+    char *assertion = g_strdup_printf("assertArrayContains(__events, DebuggerEventTypes.%s);\n",
+                                      event_type);
     run_script_in_debugger_compartment(context,
                                        debugger_compartment,
-                                       "JSUnit.assertTrue(__event_happened);\n");
+                                       assertion);
+    g_free(assertion);
 }
 
 static void
-assert_debugger_callback_not_invoked(GjsContext       *context,
-                                     JS::HandleObject  debugger_compartment)
+assert_debugger_did_not_get_event(GjsContext       *context,
+                                  JS::HandleObject  debugger_compartment,
+                                  const char       *event_type)
 {
+    char *assertion = g_strdup_printf("assertArrayDoesNotContain(__events, DebuggerEventTypes.%s);\n",
+                                      event_type);
     run_script_in_debugger_compartment(context,
                                        debugger_compartment,
-                                       "JSUnit.assertFalse(__event_happened);\n");
+                                       assertion);
+    g_free(assertion);
 }
 
 static void
@@ -276,8 +292,9 @@ test_debugger_got_enter_frame_notify(gpointer fixture_data,
                               "['step', 'frame']");
     run_script_file_in_main_compartment(fixture->context,
                                         fixture->temporary_js_script_filename);
-    assert_debugger_callback_invoked(fixture->context,
-                                     fixture->debugger_compartment);
+    assert_debugger_got_event(fixture->context,
+                              fixture->debugger_compartment,
+                              "FRAME_ENTERED");
 }
 
 static void
@@ -291,8 +308,41 @@ test_debugger_disable_frame_entry_notification(gpointer fixture_data,
                               "['disable', 'step', 'frame']");
     run_script_file_in_main_compartment(fixture->context,
                                         fixture->temporary_js_script_filename);
-    assert_debugger_callback_not_invoked(fixture->context,
-                                         fixture->debugger_compartment);
+    assert_debugger_did_not_get_event(fixture->context,
+                                      fixture->debugger_compartment,
+                                      "FRAME_ENTERED");
+}
+
+static void
+test_debugger_got_single_step(gpointer fixture_data,
+                              gconstpointer user_data)
+{
+    GjsDebuggerFixture *fixture = (GjsDebuggerFixture *) fixture_data;
+
+    run_debugger_command_list(fixture->context,
+                              fixture->debugger_compartment,
+                              "['step']");
+    run_script_file_in_main_compartment(fixture->context,
+                                        fixture->temporary_js_script_filename);
+    assert_debugger_got_event(fixture->context,
+                              fixture->debugger_compartment,
+                              "SINGLE_STEP");
+}
+
+static void
+test_debugger_disable_single_step(gpointer fixture_data,
+                                               gconstpointer user_data)
+{
+    GjsDebuggerFixture *fixture = (GjsDebuggerFixture *) fixture_data;
+
+    run_debugger_command_list(fixture->context,
+                              fixture->debugger_compartment,
+                              "['disable', 'step']");
+    run_script_file_in_main_compartment(fixture->context,
+                                        fixture->temporary_js_script_filename);
+    assert_debugger_did_not_get_event(fixture->context,
+                                      fixture->debugger_compartment,
+                                      "SINGLE_STEP");
 }
 
 typedef struct _FixturedTest {

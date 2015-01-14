@@ -948,45 +948,6 @@ static JSClass coverage_global_class = {
     { NULL }
 };
 
-static gboolean
-gjs_context_eval_file_in_compartment(GjsContext *context,
-                                     const char *filename,
-                                     JSObject   *compartment_object,
-                                     GError     **error)
-{
-    char  *script = NULL;
-    gsize script_len = 0;
-
-    GFile *file = g_file_new_for_commandline_arg(filename);
-
-    if (!g_file_load_contents(file,
-                              NULL,
-                              &script,
-                              &script_len,
-                              NULL,
-                              error))
-        return FALSE;
-
-    jsval return_value;
-
-    JSContext *js_context = (JSContext *) gjs_context_get_native_context(context);
-
-    JSAutoCompartment compartment(js_context, compartment_object);
-
-    if (!gjs_eval_with_scope(js_context,
-                             compartment_object,
-                             script, script_len, filename,
-                             &return_value)) {
-        gjs_log_exception(js_context);
-        g_set_error(error, GJS_ERROR, GJS_ERROR_FAILED, "Failed to evaluate %s", filename);
-        return FALSE;
-    }
-
-    g_free(script);
-
-    return TRUE;
-}
-
 static JSBool
 coverage_warning(JSContext *context,
                  unsigned   argc,
@@ -1105,6 +1066,26 @@ bootstrap_coverage(GjsCoverage *coverage)
 
     {
         JSAutoCompartment compartment(context, debugger_compartment);
+
+        if (!JS_InitStandardClasses(context, debugger_compartment)) {
+            gjs_throw(context, "Failed to init standard classes");
+            return FALSE;
+        }
+
+        if (!JS_InitReflect(context, debugger_compartment)) {
+            gjs_throw(context, "Failed to init Reflect");
+            return FALSE;
+        }
+
+        if (!JS_DefineFunctions(context, debugger_compartment, &coverage_funcs[0]))
+            g_error("Failed to init coverage");
+
+        if (!gjs_eval_file_with_scope(context,
+                                      coverage_script,
+                                      debugger_compartment,
+                                      &error))
+            g_error("Failed to eval coverage script: %s\n", error->message);
+
         JS::RootedObject debuggeeWrapper(context, debuggee);
         if (!JS_WrapObject(context, debuggeeWrapper.address())) {
             gjs_throw(context, "Failed to wrap debugeee");
@@ -1117,29 +1098,10 @@ bootstrap_coverage(GjsCoverage *coverage)
             return FALSE;
         }
 
-        if (!JS_InitStandardClasses(context, debugger_compartment)) {
-            gjs_throw(context, "Failed to init standard classes");
-            return FALSE;
-        }
-
-        if (!JS_InitReflect(context, debugger_compartment)) {
-            gjs_throw(context, "Failed to init Reflect");
-            return FALSE;
-        }
-
         if (!JS_DefineDebuggerObject(context, debugger_compartment)) {
             gjs_throw(context, "Failed to init Debugger");
             return FALSE;
         }
-
-        if (!JS_DefineFunctions(context, debugger_compartment, &coverage_funcs[0]))
-            g_error("Failed to init coverage");
-
-        if (!gjs_context_eval_file_in_compartment(priv->context,
-                                                  coverage_script,
-                                                  debugger_compartment,
-                                                  &error))
-            g_error("Failed to eval coverage script: %s\n", error->message);
 
         jsval coverage_statistics_prototype_value;
         if (!JS_GetProperty(context, debugger_compartment, "CoverageStatistics", &coverage_statistics_prototype_value) ||

@@ -232,6 +232,7 @@ gjs_debugger_single_handler_fixture_set_up(gpointer      fixture_data,
                                        "let __controller = new DebuggerCommandController(function(info) {\n"
                                        "                       if (info.url === __script_name)\n"
                                        "                           __events.push(info.type);\n"
+                                       "                       return true;\n"
                                        "                   });\n");
 }
 

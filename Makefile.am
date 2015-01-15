@@ -114,6 +114,7 @@ libgjs_la_SOURCES =		\
 	gjs/gi.cpp		\
 	gjs/coverage.cpp \
 	gjs/debugger.cpp \
+        gjs/debugger-console.cpp \
 	gjs/jsapi-private.cpp	\
 	gjs/jsapi-util.cpp	\
 	gjs/jsapi-dynamic-class.cpp \
@@ -216,9 +217,10 @@ bin_PROGRAMS += gjs-console
 
 gjs_console_CPPFLAGS = 		\
 	$(AM_CPPFLAGS)		\
+        $(GJS_CFLAGS)		\
         $(GOBJECT_CFLAGS)
 gjs_console_LDADD =		\
-	$(JS_LIBS)		\
+        $(JS_LIBS)		\
 	$(GOBJECT_LIBS)		\
 	libgjs.la
 gjs_console_LDFLAGS = -rdynamic

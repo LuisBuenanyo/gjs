@@ -71,10 +71,15 @@ function _appendUnique(array, element) {
     }
 }
 
-const DebuggerEventTypes = _createEnum('FRAME_ENTERED',
+const DebuggerEventTypes = _createEnum('PROGRAM_STARTED',
+                                       'FRAME_ENTERED',
                                        'SINGLE_STEP');
 
-function DebuggerCommandController(onStop) {
+const DebuggerCommandState = _createEnum('RETURN_CONTROL',
+                                         'MORE_INPUT',
+                                         'NOT_PROCESSED');
+
+function DebuggerCommandController(onStop, interactiveStart) {
 
     /* Some matchers. If a command satisfies the matcher property
      * then recurse into the value properties or apply th
@@ -88,6 +93,13 @@ function DebuggerCommandController(onStop) {
     const NoneRemaining = function(node, array) {
         return array.length === 0;
     };
+
+    const callUserFunctionUntilTrue = function(userFunction) {
+        let result = false;
+        while (!result) {
+            result = userFunction.apply(arguments);
+        }
+    }
 
     /* Handlers for various debugger actions */
     const onFrameEntered = function(frame) {
@@ -124,6 +136,7 @@ function DebuggerCommandController(onStop) {
                             match: NoneRemaining,
                             func: function() {
                                 __debugger.onEnterFrame = onFrameEntered;
+                                return DebuggerCommandState.MORE_INPUT;
                             }
                         }
                     }
@@ -143,6 +156,8 @@ function DebuggerCommandController(onStop) {
                         for (frame of this._trackingFrames) {
                             frame.onStep = onSingleStep;
                         }
+
+                        return DebuggerCommandState.MORE_INPUT;
                     }
                 }
             }
@@ -160,6 +175,7 @@ function DebuggerCommandController(onStop) {
                                     match: NoneRemaining,
                                     func: function() {
                                         __debugger.onEnterFrame = undefined;
+                                        return DebuggerCommandState.MORE_INPUT;
                                     }
                                 }
                             }
@@ -172,8 +188,22 @@ function DebuggerCommandController(onStop) {
                                     frame.onStep = undefined;
                                 }
                                 this._trackingFrames = [];
+                                return DebuggerCommandState.MORE_INPUT;
                             }
                         }
+                    }
+                }
+            }
+        },
+        cont: {
+            match: Exactly,
+            tree: {
+                _: {
+                    match: NoneRemaining,
+                    func: function() {
+                        /* Does nothing. This will cause us to return true
+                         * and the debugger will just continue execution */
+                        return DebuggerCommandState.RETURN_CONTROL;
                     }
                 }
             }
@@ -181,7 +211,7 @@ function DebuggerCommandController(onStop) {
     };
 
     this._process = function(tree, commandArray) {
-        let commandProcessed = false;
+        let commandState = DebuggerCommandState.NOT_PROCESSED;
 
         for (let key of Object.keys(tree)) {
             if (tree[key].match(key, commandArray)) {
@@ -189,23 +219,37 @@ function DebuggerCommandController(onStop) {
                 remainingCommands.shift();
                 /* There's a tree on this node, recurse into that tree */
                 if (tree[key].hasOwnProperty('tree')) {
-                    commandProcessed = this._process(tree[key].tree,
-                                                     remainingCommands);
+                    commandState = this._process(tree[key].tree,
+                                                 remainingCommands);
                 } else if (tree[key].hasOwnProperty('func')) {
                     /* Apply the function to the remaining arguments */
-                    tree[key].func.apply(this, remainingCommands);
-                    commandProcessed = true;
+                    commandState = tree[key].func.apply(this, remainingCommands);
                     break;
                 }
             }
         }
 
-        return commandProcessed;
+        return commandState;
     };
+
+    /* For the very first frame, we intend to stop and ask the user what to do. This
+     * hook gets cleared upon being reached */
+    if (interactiveStart !== undefined) {
+        __debugger.onEnterFrame = function (frame) {
+            onStop(_createStopInfoForFrame('Program started',
+                                           DebuggerEventTypes.PROGRAM_STARTED,
+                                           frame));
+            __debugger.onEnterFrame = undefined;
+            return undefined;
+        }
+    }
 
     this._trackingFrames = [];
     this.handleInput = function(inputArray) {
-        if (!this._process(commands, inputArray))
+        const result = this._process(commands, inputArray);
+        if (result == DebuggerCommandState.NOT_PROCESSED)
             warning('Could not parse command set ' + inputArray);
+
+        return result;
     }
 }

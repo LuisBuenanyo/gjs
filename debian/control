@@ -64,3 +64,16 @@ Description: Mozilla-based javascript bindings for the GNOME platform
  .
  This package contains the development files applications need to
  build against.
+
+Package: gjs-dbg
+Architecture: any
+Section: debug
+Depends: ${misc:Depends},
+         gjs (= ${binary:Version}),
+         libgjs0e (= ${binary:Version})
+Description: Mozilla-based javascript bindings for the GNOME platform
+ Makes it possible for applications to use all of GNOME's platform
+ libraries using the Javascript language. It's mainly based on the
+ Mozilla javascript engine and the GObject introspection framework.
+ .
+ This package contains the debugging symbols for gjs and libgjs.

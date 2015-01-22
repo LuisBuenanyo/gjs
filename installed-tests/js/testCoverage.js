@@ -8,13 +8,19 @@ function parseScriptForExpressionLines(script) {
 
 function assertArrayEquals(actual, expected, assertion) {
     if (actual.length != expected.length)
-        throw "Arrays not equal length. Actual array was " +
-                actual.length + " and Expected array was " +
-                expected.length;
+        throw new Error("Arrays not equal length. Actual array was " +
+                        actual.length + " and Expected array was " +
+                        expected.length);
 
     for (let i = 0; i < actual.length; i++) {
         assertion(expected[i], actual[i]);
     }
+}
+
+function testExpressionLinesWithNoTrailingNewline() {
+    let foundLines = parseScriptForExpressionLines("let x;\n" +
+                                                   "let y;");
+    assertArrayEquals(foundLines, [1, 2], JSUnit.assertEquals);
 }
 
 function testExpressionLinesFoundForAssignmentExpressionSides() {
@@ -264,6 +270,17 @@ function functionDeclarationsEqual(actual, expected) {
     JSUnit.assertEquals(expected.n_params, actual.n_params);
 }
 
+function testFunctionsFoundNoTrailingNewline() {
+    let foundFuncs = parseScriptForFunctionNames("function f1() {}\n" +
+                                                 "function f2() {}\n");
+    assertArrayEquals(foundFuncs,
+                      [
+                          { name: "f1", line: 1, n_params: 0 },
+                          { name: "f2", line: 2, n_params: 0 }
+                      ],
+                      functionDeclarationsEqual);
+}
+
 function testFunctionsFoundForDeclarations() {
     let foundFunctionDeclarations =
         parseScriptForFunctionNames("function f1() {}\n" +
@@ -490,7 +507,7 @@ function testFunctionsInsideForInObject() {
                       functionDeclarationsEqual);
 }
 
-function testFunctionsInsideForInObject() {
+function testFunctionsInsideForEachInObject() {
     let foundFunctions =
         parseScriptForFunctionNames("for each (x in function() {}()) {}\n");
 
@@ -618,6 +635,15 @@ function parseScriptForBranches(script) {
 function branchInfoEqual(actual, expected) {
     JSUnit.assertEquals(expected.point, actual.point);
     assertArrayEquals(expected.exits, actual.exits, JSUnit.assertEquals);
+}
+
+function testFindBranchWhereNoTrailingNewline() {
+    let foundBranchExits = parseScriptForBranches("if (1) { let a = 1; }");
+    assertArrayEquals(foundBranchExits,
+                      [
+                          { point: 1, exits: [1] }
+                      ],
+                      branchInfoEqual);
 }
 
 function testBothBranchExitsFoundForSimpleBranch() {
@@ -809,7 +835,7 @@ function testZeroExpressionLinesToCounters() {
     let nLines = 1;
     let counters = Coverage._expressionLinesToCounters(expressionLines, nLines);
 
-    assertArrayEquals([undefined], counters, JSUnit.assertEquals);
+    assertArrayEquals([undefined, undefined], counters, JSUnit.assertEquals);
 }
 
 function testSingleExpressionLineToCounters() {
@@ -817,7 +843,8 @@ function testSingleExpressionLineToCounters() {
     let nLines = 4;
     let counters = Coverage._expressionLinesToCounters(expressionLines, nLines);
 
-    assertArrayEquals([undefined, 0, 0, undefined], counters, JSUnit.assertEquals);
+    assertArrayEquals([undefined, 0, 0, undefined, undefined],
+                      counters, JSUnit.assertEquals);
 }
 
 const MockFoundBranches = [
@@ -833,14 +860,14 @@ const MockFoundBranches = [
 
 const MockNLines = 9;
 
-function testGetsSameNumberOfCountersAsNLines() {
+function testGetsSameNumberOfCountersAsNLinesPlusOne() {
     let counters = Coverage._branchesToBranchCounters(MockFoundBranches, MockNLines);
-    JSUnit.assertEquals(MockNLines, counters.length);
+    JSUnit.assertEquals(MockNLines + 1, counters.length);
 }
 
 function testEmptyArrayReturnedForNoBranches() {
     let counters = Coverage._branchesToBranchCounters([], 1);
-    assertArrayEquals([undefined], counters, JSUnit.assertEquals);
+    assertArrayEquals([undefined, undefined], counters, JSUnit.assertEquals);
 }
 
 function testBranchesOnLinesForArrayIndicies() {
@@ -922,7 +949,7 @@ function testKnownFunctionsArrayPopulatedForFunctions() {
     let knownFunctionsArray = Coverage._populateKnownFunctions(functions, 4);
 
     assertArrayEquals(knownFunctionsArray,
-                      [undefined, true, true, undefined],
+                      [undefined, true, true, undefined, undefined],
                       JSUnit.assertEquals);
 }
 
@@ -1106,9 +1133,12 @@ Coverage.getFileContents = function(filename) {
 
 function testCoverageStatisticsContainerFetchesValidStatisticsForFile() {
     let container = new Coverage.CoverageStatisticsContainer(MockFilenames);
-    let statistics = container.fetchStatistics('filename');
 
+    let statistics = container.fetchStatistics('filename');
     JSUnit.assertNotEquals(undefined, statistics);
+
+    let files = container.getCoveredFiles();
+    assertArrayEquals(files, ['filename'], JSUnit.assertEquals);
 }
 
 function testCoverageStatisticsContainerThrowsForNonExistingFile() {
@@ -1117,7 +1147,6 @@ function testCoverageStatisticsContainerThrowsForNonExistingFile() {
     JSUnit.assertRaises(function() {
         container.fetchStatistics('nonexistent');
     });
-
 }
 
 JSUnit.gjstestRun(this, JSUnit.setUp, JSUnit.tearDown);

@@ -415,7 +415,7 @@ function _expressionLinesToCounters(expressionLines, nLines) {
     expressionLines.sort(function(left, right) { return left - right; });
 
     let expressionLinesIndex = 0;
-    let counters = new Array(nLines);
+    let counters = new Array(nLines + 1);
 
     if (expressionLines.length === 0)
         return counters;
@@ -443,7 +443,7 @@ function _branchesToBranchCounters(branches, nLines) {
     });
 
     let branchIndex = 0;
-    let counters = new Array(nLines);
+    let counters = new Array(nLines + 1);
 
     if (branches.length === 0)
         return counters;
@@ -503,7 +503,7 @@ function _functionsToFunctionCounters(functions) {
 }
 
 function _populateKnownFunctions(functions, nLines) {
-    let knownFunctions = new Array(nLines);
+    let knownFunctions = new Array(nLines + 1);
 
     functions.forEach(function(func) {
         knownFunctions[func.line] = true;
@@ -543,7 +543,7 @@ function _incrementFunctionCounters(functionCounters,
             --line;
             functionKey = name + ':' + line + ':' + nArgs;
             functionCountersForKey = functionCounters[functionKey];
-        } while(linesWithKnownFunctions[line] !== true)
+        } while (linesWithKnownFunctions[line] !== true);
     }
 
     if (functionCountersForKey !== undefined) {
@@ -633,7 +633,7 @@ function _convertFunctionCountersToArray(functionCounters) {
     /* functionCounters is an object so convert it to
      * an array-of-object using the key as a property
      * of that object */
-    for (let key in functionCounters) {
+    for (let key of Object.getOwnPropertyNames(functionCounters)) {
         let func = functionCounters[key];
         /* The name of the function contains its line, after the first
          * colon. Split the name and retrieve it here */
@@ -687,11 +687,19 @@ function CoverageStatisticsContainer(files) {
         return coveredFiles[filename];
     }
 
+    this.getCoveredFiles = function() {
+        return Object.keys(coveredFiles);
+    };
+
     this.fetchStatistics = function(filename) {
         let statistics = ensureStatisticsFor(filename);
         if (statistics === undefined)
             throw new Error('Not tracking statistics for ' + filename);
         return statistics;
+    };
+
+    this.deleteStatistics = function(filename) {
+        coveredFiles[filename] = undefined;
     };
 }
 
@@ -699,14 +707,20 @@ function CoverageStatisticsContainer(files) {
  * Main class tying together the Debugger object and CoverageStatisticsContainer.
  *
  * It isn't poissible to unit test this class because it depends on running
- * Debugger which in turn depends on objects injected in from another compartment */
+ * Debugger which in turn depends on objects injected in from another
+ * compartment */
 function CoverageStatistics(files) {
     this.container = new CoverageStatisticsContainer(files);
     let fetchStatistics = this.container.fetchStatistics.bind(this.container);
+    let deleteStatistics = this.container.deleteStatistics.bind(this.container);
 
     /* 'debuggee' comes from the invocation from
      * a separate compartment inside of coverage.cpp */
     this.dbg = new Debugger(debuggee);
+
+    this.getCoveredFiles = function() {
+        return this.container.getCoveredFiles();
+    };
 
     this.getNumberOfLinesFor = function(filename) {
         return fetchStatistics(filename).nLines;
@@ -735,17 +749,34 @@ function CoverageStatistics(files) {
             return undefined;
         }
 
+        function _logExceptionAndReset(e, callee, line) {
+            warning(e.fileName + ":" + e.lineNumber + " (processing " +
+                    frame.script.url + ":" + callee + ":" + line + ") - " +
+                    e.message);
+            warning("Will not log statistics for this file");
+            frame.onStep = undefined;
+            frame._branchTracker = undefined;
+            deleteStatistics(frame.script.url);
+        }
+
         /* Log function calls */
         if (frame.callee !== null && frame.callee.callable) {
             let name = frame.callee.name ? frame.callee.name : "(anonymous)";
             let line = frame.script.getOffsetLine(frame.offset);
             let nArgs = frame.callee.parameterNames.length;
 
-            _incrementFunctionCounters(statistics.functionCounters,
-                                       statistics.linesWithKnownFunctions,
-                                       name,
-                                       line,
-                                       nArgs);
+            try {
+                _incrementFunctionCounters(statistics.functionCounters,
+                                           statistics.linesWithKnownFunctions,
+                                           name,
+                                           line,
+                                           nArgs);
+            } catch (e) {
+                /* Something bad happened. Log the exception and delete
+                 * statistics for this file */
+                _logExceptionAndReset(e, name, line);
+                return undefined;
+            }
         }
 
         /* Upon entering the frame, the active branch is always inactive */
@@ -757,19 +788,26 @@ function CoverageStatistics(files) {
             let offset = this.offset;
             let offsetLine = this.script.getOffsetLine(offset);
 
-            _incrementExpressionCounters(statistics.expressionCounters,
-                                         offsetLine,
-                                         function(line) {
-                                             warning("executed " +
-                                                     frame.script.url +
-                                                     ":" +
-                                                     offsetLine +
-                                                     " which we thought wasn't executable");
-                                         });
-
-            this._branchTracker.incrementBranchCounters(offsetLine);
+            try {
+                _incrementExpressionCounters(statistics.expressionCounters,
+                                             offsetLine,
+                                             function(line) {
+                                                 warning("executed " +
+                                                         frame.script.url +
+                                                         ":" +
+                                                         line +
+                                                         " which we thought" +
+                                                         " wasn't executable");
+                                             });
+                this._branchTracker.incrementBranchCounters(offsetLine);
+            } catch (e) {
+                /* Something bad happened. Log the exception and delete
+                 * statistics for this file */
+                _logExceptionAndReset(e, name, offsetLine);
+            }
         };
 
+        /* Explicitly return here to satisfy strict mode */
         return undefined;
     };
 }

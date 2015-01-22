@@ -75,28 +75,10 @@ typedef struct _GjsCoverageFunction {
 } GjsCoverageFunction;
 
 static void
-write_string_into_stream(GOutputStream *stream,
-                         const gchar   *string)
-{
-    g_output_stream_write(stream, (gconstpointer) string, strlen(string) * sizeof(gchar), NULL, NULL);
-}
-
-static void
-write_uint32_into_stream(GOutputStream *stream,
-                         unsigned int   integer)
-{
-    char buf[32];
-    g_snprintf(buf, 32, "%u", integer);
-    g_output_stream_write(stream, (gconstpointer) buf, strlen(buf) * sizeof(char), NULL, NULL);
-}
-
-static void
 write_source_file_header(GOutputStream *stream,
                          const gchar   *source_file_path)
 {
-    write_string_into_stream(stream, "SF:");
-    write_string_into_stream(stream, source_file_path);
-    write_string_into_stream(stream, "\n");
+    g_output_stream_printf(stream, NULL, NULL, NULL, "SF:%s\n", source_file_path);
 }
 
 typedef struct _FunctionHitCountData {
@@ -112,17 +94,12 @@ write_function_hit_count(GOutputStream *stream,
                          unsigned int  *n_functions_found,
                          unsigned int  *n_functions_hit)
 {
-    char *line = g_strdup_printf("FNDA:%i,%s\n",
-                                 hit_count,
-                                 function_name);
-
     (*n_functions_found)++;
 
     if (hit_count > 0)
         (*n_functions_hit)++;
 
-    write_string_into_stream(stream, line);
-    g_free(line);
+    g_output_stream_printf(stream, NULL, NULL, NULL, "FNDA:%d,%s\n", hit_count, function_name);
 }
 
 static void
@@ -150,11 +127,7 @@ write_function_foreach_func(gpointer value,
     GOutputStream       *stream = (GOutputStream *) user_data;
     GjsCoverageFunction *function = (GjsCoverageFunction *) value;
 
-    write_string_into_stream(stream, "FN:");
-    write_uint32_into_stream(stream, function->line_number);
-    write_string_into_stream(stream, ",");
-    write_string_into_stream(stream, function->key);
-    write_string_into_stream(stream, "\n");
+    g_output_stream_printf(stream, NULL, NULL, NULL, "FN:%d,%s\n", function->line_number, function->key);
 }
 
 static void
@@ -178,26 +151,12 @@ write_functions(GOutputStream *data_stream,
 }
 
 static void
-write_int32_into_stream(GOutputStream *stream,
-                        int            integer)
-{
-    char buf[32];
-    g_snprintf(buf, 32, "%i", integer);
-    g_output_stream_write(stream, (gconstpointer) buf, strlen(buf) * sizeof(char), NULL, NULL);
-}
-
-static void
 write_function_coverage(GOutputStream *data_stream,
                         unsigned int  n_found_functions,
                         unsigned int  n_hit_functions)
 {
-    write_string_into_stream(data_stream, "FNF:");
-    write_uint32_into_stream(data_stream, n_found_functions);
-    write_string_into_stream(data_stream, "\n");
-
-    write_string_into_stream(data_stream, "FNH:");
-    write_uint32_into_stream(data_stream, n_hit_functions);
-    write_string_into_stream(data_stream, "\n");
+    g_output_stream_printf(data_stream, NULL, NULL, NULL, "FNF:%d\n", n_found_functions);
+    g_output_stream_printf(data_stream, NULL, NULL, NULL, "FNH:%d\n", n_hit_functions);
 }
 
 typedef struct _WriteAlternativeData {
@@ -235,16 +194,11 @@ write_individual_branch(gpointer branch_ptr,
         if (!branch->hit)
             hit_count_string = g_strdup_printf("-");
         else
-            hit_count_string = g_strdup_printf("%i", alternative_counter);
+            hit_count_string = g_strdup_printf("%d", alternative_counter);
 
-        char *branch_alternative_line = g_strdup_printf("BRDA:%i,0,%i,%s\n",
-                                                        branch_point,
-                                                        i,
-                                                        hit_count_string);
-
-        write_string_into_stream(data->output_stream, branch_alternative_line);
+        g_output_stream_printf(data->output_stream, NULL, NULL, NULL, "BRDA:%d,0,%d,%s\n",
+                               branch_point, i, hit_count_string);
         g_free(hit_count_string);
-        g_free(branch_alternative_line);
 
         ++(*data->n_branch_exits_found);
 
@@ -277,13 +231,8 @@ write_branch_totals(GOutputStream *stream,
                     unsigned int   n_branch_exits_found,
                     unsigned int   n_branch_exits_hit)
 {
-    write_string_into_stream(stream, "BRF:");
-    write_uint32_into_stream(stream, n_branch_exits_found);
-    write_string_into_stream(stream, "\n");
-
-    write_string_into_stream(stream, "BRH:");
-    write_uint32_into_stream(stream, n_branch_exits_hit);
-    write_string_into_stream(stream, "\n");
+    g_output_stream_printf(stream, NULL, NULL, NULL, "BRF:%d\n", n_branch_exits_found);
+    g_output_stream_printf(stream, NULL, NULL, NULL, "BRH:%d\n", n_branch_exits_hit);
 }
 
 static void
@@ -299,11 +248,7 @@ write_line_coverage(GOutputStream *stream,
         if (hit_count_for_line == -1)
             continue;
 
-        write_string_into_stream(stream, "DA:");
-        write_uint32_into_stream(stream, i);
-        write_string_into_stream(stream, ",");
-        write_int32_into_stream(stream, hit_count_for_line);
-        write_string_into_stream(stream, "\n");
+        g_output_stream_printf(stream, NULL, NULL, NULL, "DA:%d,%d\n", i, hit_count_for_line);
 
         if (hit_count_for_line > 0)
             ++(*lines_hit_count);
@@ -317,19 +262,14 @@ write_line_totals(GOutputStream *stream,
                   unsigned int   lines_hit_count,
                   unsigned int   executable_lines_count)
 {
-    write_string_into_stream(stream, "LH:");
-    write_uint32_into_stream(stream, lines_hit_count);
-    write_string_into_stream(stream, "\n");
-
-    write_string_into_stream(stream, "LF:");
-    write_uint32_into_stream(stream, executable_lines_count);
-    write_string_into_stream(stream, "\n");
+    g_output_stream_printf(stream, NULL, NULL, NULL, "LH:%d\n", lines_hit_count);
+    g_output_stream_printf(stream, NULL, NULL, NULL, "LF:%d\n", executable_lines_count);
 }
 
 static void
 write_end_of_record(GOutputStream *stream)
 {
-    write_string_into_stream(stream, "end_of_record\n");
+    g_output_stream_printf(stream, NULL, NULL, NULL, "end_of_record\n");
 }
 
 static void
@@ -499,13 +439,13 @@ get_array_from_js_value(JSContext             *context,
             jsval element;
             if (!JS_GetElement(context, js_array, i, &element)) {
                 g_array_unref(c_side_array);
-                gjs_throw(context, "Failed to get function names array element %i", i);
+                gjs_throw(context, "Failed to get function names array element %d", i);
                 return FALSE;
             }
 
             if (!(inserter(c_side_array, context, &element))) {
                 g_array_unref(c_side_array);
-                gjs_throw(context, "Failed to convert array element %i", i);
+                gjs_throw(context, "Failed to convert array element %d", i);
                 return FALSE;
             }
         }
@@ -842,8 +782,6 @@ print_statistics_for_file(GjsCoverage   *coverage,
                                                   NULL);
 
     JSContext *context = (JSContext *) gjs_context_get_native_context(priv->context);
-    JSAutoCompartment compartment(context, priv->coverage_statistics);
-    JSAutoRequest ar(context);
 
     JSString *filename_jsstr = JS_NewStringCopyZ(context, filename);
     jsval    filename_jsval = STRING_TO_JSVAL(filename_jsstr);
@@ -903,12 +841,60 @@ print_statistics_for_file(GjsCoverage   *coverage,
     g_free(absolute_output_directory);
 }
 
+static char **
+get_covered_files(GjsCoverage *coverage)
+{
+    GjsCoveragePrivate *priv = (GjsCoveragePrivate *) gjs_coverage_get_instance_private(coverage);
+    JSContext *context = (JSContext *) gjs_context_get_native_context(priv->context);
+    jsval rval;
+    JSObject *files_obj;
+
+    char **files = NULL;
+    uint32_t n_files;
+
+    if (!JS_CallFunctionName(context, priv->coverage_statistics, "getCoveredFiles", 0, NULL, &rval)) {
+        gjs_log_exception(context);
+        goto error;
+    }
+
+    if (!rval.isObject())
+        goto error;
+
+    files_obj = &rval.toObject();
+    if (!JS_GetArrayLength(context, files_obj, &n_files))
+        goto error;
+
+    files = g_new0 (char *, n_files + 1);
+    for (uint32_t i = 0; i < n_files; i++) {
+        jsval element;
+        char *file;
+        if (!JS_GetElement(context, files_obj, i, &element))
+            goto error;
+
+        if (!gjs_string_to_utf8(context, element, &file))
+            goto error;
+
+        files[i] = file;
+    }
+
+    files[n_files] = NULL;
+    return files;
+
+ error:
+    g_strfreev(files);
+    return NULL;
+}
+
 void
 gjs_coverage_write_statistics(GjsCoverage *coverage,
                               const char  *output_directory)
 {
     GjsCoveragePrivate *priv = (GjsCoveragePrivate *) gjs_coverage_get_instance_private(coverage);
     GError *error = NULL;
+
+    JSContext *context = (JSContext *) gjs_context_get_native_context(priv->context);
+    JSAutoCompartment compartment(context, priv->coverage_statistics);
+    JSAutoRequest ar(context);
 
     /* Create output_directory if it doesn't exist */
     g_mkdir_with_parents(output_directory, 0755);
@@ -925,10 +911,11 @@ gjs_coverage_write_statistics(GjsCoverage *coverage,
                                          NULL,
                                          &error));
 
-    char **file_iter = priv->covered_paths;
-    while (*file_iter) {
-        print_statistics_for_file(coverage, *file_iter, output_directory, ostream);
-        ++file_iter;
+    char **files = get_covered_files(coverage);
+    if (files) {
+        for (char **file_iter = files; *file_iter; file_iter++)
+            print_statistics_for_file(coverage, *file_iter, output_directory, ostream);
+        g_strfreev(files);
     }
 
     g_object_unref(ostream);

@@ -230,6 +230,7 @@ gjs_debugger_single_handler_fixture_set_up(gpointer      fixture_data,
                                        fixture->debugger_compartment,
                                        "let __events = [];\n"
                                        "let __controller = new DebuggerCommandController(function(info) {\n"
+                                       "                       warning(info + 'got ' + info.type + 'for script ' + info.url);\n"
                                        "                       if (info.url === __script_name)\n"
                                        "                           __events.push(info.type);\n"
                                        "                       return true;\n"

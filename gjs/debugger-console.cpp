@@ -73,7 +73,7 @@ debugger_console_output(JSContext *context,
     JS_BeginRequest(context);
 
     /* JS_ValueToString might throw, in which we will only
-     *log that the value could be converted to string */
+     * log that the value could be converted to string */
     JSExceptionState *exc_state = JS_SaveExceptionState(context);
     jstr = JS_ValueToString(context, argv);
     if (jstr != NULL)
@@ -131,7 +131,7 @@ debugger_console_readline(JSContext *context,
     return JS_TRUE;
 }
 
-static JSFunctionSpec coverage_funcs[] = {
+static JSFunctionSpec debugger_funcs[] = {
     { "output", JSOP_WRAPPER (debugger_console_output), 1, GJS_MODULE_PROP_FLAGS },
     { "readline", JSOP_WRAPPER (debugger_console_readline), 0, GJS_MODULE_PROP_FLAGS },
     { NULL },
@@ -143,16 +143,19 @@ gjs_setup_debugger_console(GjsContext *context)
     JSContext *js_context = (JSContext *) gjs_context_get_native_context(context);
     JS::RootedObject debugger_compartment(JS_GetRuntime(js_context),
                                           gjs_get_debugger_compartment(context));
+    JSAutoRequest ar(js_context);
+    JSAutoCompartment ac(js_context, debugger_compartment);
 
-    const char *readline_script = "const __debugger = new DebuggerCommandController(function(info) {\n"
+    const char *readline_script = "const __debuggerCommandController = new DebuggerCommandController(function(info) {\n"
                                   "    output('Received ' + info.what +\n"
-                                  "           '(program stopped at ' + info.url + ':' + info.line')\\n');\n"
+                                  "           '(program stopped at ' + info.url + ':' + info.line + ')\\n');\n"
                                   "    let next_command = readline();\n"
-                                  "    if (__debugger.handleInput(next_command.split(' ') == DebuggerCommandState.RETURN_CONTROL)) {\n"
+                                  "    if (__debuggerCommandController.handleInput(next_command.split(' ')) == DebuggerCommandState.RETURN_CONTROL)\n"
                                   "        return true;\n"
                                   "    return false;\n"
-                                  "});\n";
+                                  "}, true);\n";
 
+    printf("Evaluating script\n");
     jsval retval;
     if (!gjs_eval_with_scope(js_context,
                              debugger_compartment,
@@ -164,10 +167,7 @@ gjs_setup_debugger_console(GjsContext *context)
         return NULL;
     }
 
-    JSAutoRequest ar(js_context);
-    JSAutoCompartment ac(js_context, debugger_compartment);
-
-    if (!JS_DefineFunctions(js_context, debugger_compartment, coverage_funcs)) {
+    if (!JS_DefineFunctions(js_context, debugger_compartment, debugger_funcs)) {
         gjs_throw(js_context, "Failed to define debugger console functions");
         return NULL;
     }

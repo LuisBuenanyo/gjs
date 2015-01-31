@@ -97,24 +97,28 @@ function DebuggerCommandController(onStop, interactiveStart) {
     const callUserFunctionUntilTrue = function(userFunction) {
         let result = false;
         while (!result) {
-            result = userFunction.apply(arguments);
+            warning("Repeating \n" + new Error().stack);
+            result = userFunction.apply(this,
+                                        Array.prototype.slice.call(arguments, 1));
         }
     }
 
     /* Handlers for various debugger actions */
     const onFrameEntered = function(frame) {
-        onStop(_createStopInfoForFrame('Frame entered',
-                                       DebuggerEventTypes.FRAME_ENTERED,
-                                       frame))
+        let stopInfo = _createStopInfoForFrame('Frame entered',
+                                               DebuggerEventTypes.FRAME_ENTERED,
+                                               frame);
+        callUserFunctionUntilTrue(onStop, stopInfo);
         return undefined;
     };
 
     const onSingleStep = function() {
         /* 'this' inside the onSingleStep handler is the frame itself. */
-        onStop(_createStopInfoForFrame('Single step',
-                                       DebuggerEventTypes.SINGLE_STEP,
-                                       this));
-        return undefined;
+        warning("Single step event\n");
+        let stopInfo = _createStopInfoForFrame('Single step',
+                                               DebuggerEventTypes.SINGLE_STEP,
+                                               this);
+        callUserFunctionUntilTrue(onStop, stopInfo);
     }
 
     /* A map of commands to syntax tree / function. This is traversed
@@ -153,9 +157,14 @@ function DebuggerCommandController(onStop, interactiveStart) {
                             frame.onStep = onSingleStep;
                         });
 
-                        for (frame of this._trackingFrames) {
+                        /* Append current frame ot trackingFrames */
+                        let currentFrame = __debugger.getNewestFrame();
+                        if (currentFrame)
+                            _appendUnique(this._trackingFrames,
+                                          currentFrame);
+
+                        for (let frame of this._trackingFrames)
                             frame.onStep = onSingleStep;
-                        }
 
                         return DebuggerCommandState.MORE_INPUT;
                     }
@@ -232,14 +241,17 @@ function DebuggerCommandController(onStop, interactiveStart) {
         return commandState;
     };
 
+    warning("Called into debugger command controller " + new Error().stack);
+
     /* For the very first frame, we intend to stop and ask the user what to do. This
      * hook gets cleared upon being reached */
-    if (interactiveStart !== undefined) {
+    if (interactiveStart === true) {
         __debugger.onEnterFrame = function (frame) {
-            onStop(_createStopInfoForFrame('Program started',
-                                           DebuggerEventTypes.PROGRAM_STARTED,
-                                           frame));
             __debugger.onEnterFrame = undefined;
+            let stopInfo = _createStopInfoForFrame('Program started',
+                                                   DebuggerEventTypes.PROGRAM_STARTED,
+                                                   frame);
+            callUserFunctionUntilTrue(onStop, stopInfo);
             return undefined;
         }
     }

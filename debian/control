@@ -39,7 +39,8 @@ Package: libgjs0e
 Architecture: any
 Section: libs
 Depends: ${shlibs:Depends},
-         ${misc:Depends}
+         ${misc:Depends},
+         gir1.2-gtk-3.0
 Conflicts: libgjs0, libgjs0a, libgjs0b, libgjs0c, libgjs0d
 Replaces: libgjs0, libgjs0a, libgjs0b, libgjs0c, libgjs0d
 Provides: ${gjs:Provides}

@@ -100,6 +100,61 @@ gjs_define_static_methods(JSContext       *context,
 }
 
 static JSBool
+interface_new_resolve_no_info(JSContext              *context,
+                              JS::HandleObject        obj,
+                              JS::MutableHandleObject objp,
+                              Interface              *priv,
+                              char                   *name)
+{
+    GIFunctionInfo *method_info;
+    JSBool ret;
+    GType *interfaces;
+    guint n_interfaces;
+    guint i;
+
+    // FIXME: This is copied from object_instance_new_resolve_no_info(). It
+    // seems like it ought not to work, but it does. What's going on here?
+    ret = JS_TRUE;
+    interfaces = g_type_interfaces(priv->gtype, &n_interfaces);
+    for (i = 0; i < n_interfaces; i++) {
+        GIBaseInfo *base_info;
+        GIInterfaceInfo *iface_info;
+
+        base_info = g_irepository_find_by_gtype(g_irepository_get_default(),
+                                                interfaces[i]);
+
+        if (base_info == NULL)
+            continue;
+
+        /* An interface GType ought to have interface introspection info */
+        g_assert (g_base_info_get_type(base_info) == GI_INFO_TYPE_INTERFACE);
+
+        iface_info = (GIInterfaceInfo*) base_info;
+
+        method_info = g_interface_info_find_method(iface_info, name);
+
+        g_base_info_unref(base_info);
+
+
+        if (method_info != NULL) {
+            if (g_function_info_get_flags (method_info) & GI_FUNCTION_IS_METHOD) {
+                if (gjs_define_function(context, obj, priv->gtype,
+                                        (GICallableInfo *)method_info)) {
+                    objp.set(obj);
+                } else {
+                    ret = JS_FALSE;
+                }
+            }
+
+            g_base_info_unref( (GIBaseInfo*) method_info);
+        }
+    }
+
+    g_free(interfaces);
+    return ret;
+}
+
+static JSBool
 interface_new_resolve(JSContext *context,
                       JS::HandleObject obj,
                       JS::HandleId id,
@@ -118,6 +173,13 @@ interface_new_resolve(JSContext *context,
 
     if (priv == NULL)
         goto out;
+
+    /* If we have no GIRepository information then this interface was defined
+     * from within GJS. */
+    if (priv->info == NULL) {
+        ret = interface_new_resolve_no_info(context, obj, objp, priv, name);
+        goto out;
+    }
 
     method_info = g_interface_info_find_method((GIInterfaceInfo*) priv->info, name);
 
@@ -172,19 +234,28 @@ JSFunctionSpec gjs_interface_proto_funcs[] = {
 JSBool
 gjs_define_interface_class(JSContext       *context,
                            JSObject        *in_object,
-                           GIInterfaceInfo *info)
+                           GIInterfaceInfo *info,
+                           GType            gtype,
+                           JSObject       **constructor_p)
 {
     Interface *priv;
     const char *constructor_name;
+    const char *ns;
     JSObject *constructor;
     JSObject *prototype;
     jsval value;
 
-    constructor_name = g_base_info_get_name((GIBaseInfo*)info);
+    if (info) {
+        ns = g_base_info_get_namespace((GIBaseInfo*) info);
+        constructor_name = g_base_info_get_name((GIBaseInfo*) info);
+    } else {
+        ns = "unknown";
+        constructor_name = g_type_name(gtype);
+    }
 
     if (!gjs_init_class_dynamic(context, in_object,
                                 NULL,
-                                g_base_info_get_namespace((GIBaseInfo*)info),
+                                ns,
                                 constructor_name,
                                 &gjs_interface_class,
                                 gjs_interface_constructor, 0,
@@ -204,15 +275,20 @@ gjs_define_interface_class(JSContext       *context,
     GJS_INC_COUNTER(interface);
     priv = g_slice_new0(Interface);
     priv->info = info;
-    priv->gtype = g_registered_type_info_get_g_type(priv->info);
-    g_base_info_ref((GIBaseInfo*)priv->info);
+    priv->gtype = gtype;
+    if (info)
+        g_base_info_ref((GIBaseInfo*)priv->info);
     JS_SetPrivate(prototype, priv);
 
-    gjs_define_static_methods(context, constructor, priv->gtype, priv->info);
+    if (info)
+        gjs_define_static_methods(context, constructor, priv->gtype, priv->info);
 
     value = OBJECT_TO_JSVAL(gjs_gtype_create_gtype_wrapper(context, priv->gtype));
     JS_DefineProperty(context, constructor, "$gtype", value,
                       NULL, NULL, JSPROP_PERMANENT);
+
+    if (constructor_p)
+        *constructor_p = constructor;
 
     return JS_TRUE;
 }

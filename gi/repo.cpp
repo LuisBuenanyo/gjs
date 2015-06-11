@@ -532,7 +532,11 @@ gjs_define_info(JSContext  *context,
             return JS_FALSE;
         break;
     case GI_INFO_TYPE_INTERFACE:
-        gjs_define_interface_class(context, in_object, (GIInterfaceInfo*) info);
+        {
+            GType gtype;
+            gtype = g_registered_type_info_get_g_type((GIRegisteredTypeInfo*) info);
+            gjs_define_interface_class(context, in_object, (GIInterfaceInfo*) info, gtype, NULL);
+        }
         break;
     default:
         gjs_throw(context, "API of type %s not implemented, cannot define %s.%s",

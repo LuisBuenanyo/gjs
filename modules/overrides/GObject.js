@@ -24,6 +24,65 @@ const GjsPrivate = imports.gi.GjsPrivate;
 
 let GObject;
 
+// const GObjectInterface = new Lang.Interface({
+//     Name: 'GObjectInterface',
+//     Requires: [ Lang.Interface ],
+
+//     _construct: function (params) {
+//         printerr("This is called")
+//         return Lang.Interface.prototype._construct.apply(this, arguments);
+//     },
+// });
+
+function GObjectInterface(params) {
+    return this._construct.apply(this, arguments);
+}
+
+GObjectInterface.__super__ = Lang.Interface;
+GObjectInterface.prototype = Object.create(Lang.Interface.prototype);
+GObjectInterface.prototype.constructor = GObjectInterface;
+GObjectInterface.prototype.__name__ = 'GObjectInterface';
+
+GObjectInterface.prototype._construct = function (params) {
+    if (!params.Name) {
+        throw new TypeError("Interfaces require an explicit 'Name' parameter.");
+    }
+    let name = params.Name;
+
+    let gtypename;
+    if (params.GTypeName)
+        gtypename = params.GTypeName;
+    else
+        gtypename = 'Gjs_' + params.Name;
+
+    let interfaces = [];
+    let propertiesArray = [];
+
+    let newInterface = Gi.register_interface(gtypename, interfaces, propertiesArray);
+
+    // Since it's not possible to create a constructor with
+    // a custom [[Prototype]], we have to do this to make
+    // "newInterface instanceof Interface" work, and so we can inherit
+    // methods/properties of Interface.prototype, like _check.
+    newInterface.__proto__ = this.constructor.prototype;
+
+    // newClass.__super__ = parent;
+    // newClass.prototype = Object.create(parent.prototype);
+    newInterface.prototype.constructor = newInterface;
+
+    newInterface._init.apply(newInterface, arguments);
+
+    Object.defineProperty(newInterface.prototype, '__metaclass__', {
+        writable: false,
+        configurable: false,
+        enumerable: false,
+        value: this.constructor,
+    });
+    // return Lang.Interface.prototype._construct.apply(this, arguments);
+
+    return newInterface;
+};
+
 const GObjectMeta = new Lang.Class({
     Name: 'GObjectClass',
     Extends: Lang.Class,
@@ -288,6 +347,7 @@ function _init() {
 
 
     this.Class = GObjectMeta;
+    this.Interface = GObjectInterface;
     this.Object.prototype.__metaclass__ = this.Class;
 
     // For compatibility with Lang.Class... we need a _construct

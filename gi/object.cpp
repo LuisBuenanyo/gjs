@@ -28,6 +28,7 @@
 #include <gjs/gi.h>
 #include "object.h"
 #include "gtype.h"
+#include "interface.h"
 #include "arg.h"
 #include "repo.h"
 #include "gtype.h"
@@ -2445,6 +2446,12 @@ gjs_object_set_gproperty (GObject      *object,
 }
 
 static void
+gjs_interface_init(GTypeInterface *g_iface,
+                   gpointer        iface_data)
+{
+}
+
+static void
 gjs_object_class_init(GObjectClass *klass,
                       gpointer      user_data)
 {
@@ -2522,6 +2529,124 @@ gjs_add_interface(GType instance_type,
     g_type_add_interface_static(instance_type,
                                 interface_type,
                                 &interface_vtable);
+}
+
+static JSBool
+gjs_register_interface(JSContext *cx,
+                       unsigned   argc,
+                       jsval     *vp)
+{
+    jsval *argv = JS_ARGV(cx, vp);
+    gchar *name;
+    JSObject *constructor, *interfaces, *properties, *module;
+    guint32 i, n_interfaces, n_properties;
+    GType *iface_types;
+    JSBool retval = JS_FALSE;
+
+    JS_BeginRequest(cx);
+
+    GType interface_type, parent_type;
+    GTypeQuery query;
+    GTypeModule *type_module;
+    // ObjectInstance *parent_priv;
+
+    GTypeInfo type_info = {
+        0, /* class_size */
+
+        (GBaseInitFunc) NULL,
+        (GBaseFinalizeFunc) NULL,
+
+        (GClassInitFunc) gjs_interface_init,
+        (GClassFinalizeFunc) NULL,
+        NULL, /* class_data */
+
+        0,    /* instance_size */
+        0,    /* n_preallocs */
+        NULL,
+    };
+
+    if (!gjs_parse_args(cx, "register_interface",
+                        "soo", argc, argv,
+                        "name", &name,
+                        "interfaces", &interfaces,
+                        "properties", &properties))
+        goto out;
+
+    if (!JS_IsArrayObject(cx, interfaces)) {
+        gjs_throw(cx, "Invalid parameter interfaces (expected Array)");
+        goto out;
+    }
+
+    if (!JS_GetArrayLength(cx, interfaces, &n_interfaces))
+        goto out;
+
+    if (!JS_IsArrayObject(cx, properties)) {
+        gjs_throw(cx, "Invalid parameter properties (expected Array)");
+        goto out;
+    }
+
+    if (!JS_GetArrayLength(cx, properties, &n_properties))
+        goto out;
+
+    iface_types = (GType*) g_alloca(sizeof(GType) * n_interfaces);
+
+    /* We do interface addition in two passes so that any failure
+       is caught early, before registering the GType (which we can't undo) */
+    /* TODO: DRY */
+    for (i = 0; i < n_interfaces; i++) {
+        jsval iface_val;
+        GType iface_type;
+
+        if (!JS_GetElement(cx, interfaces, i, &iface_val))
+            goto out;
+
+        if (!JSVAL_IS_OBJECT(iface_val) ||
+            ((iface_type = gjs_gtype_get_actual_gtype(cx, JSVAL_TO_OBJECT(iface_val)))
+             == G_TYPE_INVALID)) {
+            gjs_throw(cx, "Invalid parameter interfaces (element %d was not a GType)", i);
+            goto out;
+        }
+
+        iface_types[i] = iface_type;
+    }
+
+    if (g_type_from_name(name) != G_TYPE_INVALID) {
+        gjs_throw (cx, "Type name %s is already registered", name);
+        goto out;
+    }
+
+    g_type_query(G_TYPE_INTERFACE, &query);
+
+    type_info.class_size = query.class_size;
+    type_info.instance_size = query.instance_size;
+
+    type_module = G_TYPE_MODULE (gjs_type_module_get());
+    interface_type = g_type_module_register_type(type_module,
+                                                 G_TYPE_INTERFACE,
+                                                 name,
+                                                 &type_info,
+                                                 (GTypeFlags) 0);
+
+    g_free(name);
+
+    g_type_set_qdata (interface_type, gjs_is_custom_type_quark(), GINT_TO_POINTER (1));
+
+    // for (i = 0; i < n_interfaces; i++)
+    //     g_type_interface_add_prerequisite(interface_type, iface_types[i]);
+
+    /* create a custom JSClass */
+    module = gjs_lookup_private_namespace(cx);
+    gjs_define_interface_class(cx, module, NULL, interface_type, &constructor);
+
+    JS_SET_RVAL(cx, vp, OBJECT_TO_JSVAL(constructor));
+
+    retval = JS_TRUE;
+
+out:
+    // g_clear_pointer(&properties_native, g_ptr_array_unref);
+    JS_EndRequest(cx);
+
+    return retval;
 }
 
 static JSBool
@@ -2771,6 +2896,7 @@ gjs_signal_new(JSContext *cx,
 }
 
 static JSFunctionSpec module_funcs[] = {
+    { "register_interface", JSOP_WRAPPER ((JSNative) gjs_register_interface), 3, GJS_MODULE_PROP_FLAGS },
     { "register_type", JSOP_WRAPPER ((JSNative) gjs_register_type), 4, GJS_MODULE_PROP_FLAGS },
     { "add_interface", JSOP_WRAPPER ((JSNative) gjs_add_interface), 2, GJS_MODULE_PROP_FLAGS },
     { "hook_up_vfunc", JSOP_WRAPPER ((JSNative) gjs_hook_up_vfunc), 3, GJS_MODULE_PROP_FLAGS },

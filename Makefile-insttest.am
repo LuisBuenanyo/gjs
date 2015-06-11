@@ -21,6 +21,7 @@ gjsinsttest_PROGRAMS += jsunit
 endif
 
 TEST_PROGS += jsunit
+TEST_PROGS_OPTIONS = -p /js/GObjectInterface -p /js/GObjectClass
 
 TEST_INTROSPECTION_GIRS =
 

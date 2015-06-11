@@ -1,3 +1,96 @@
+gjs (1.43.3-1endless1) unstable; urgency=medium
+
+  * Move to upstream release 1.43.3
+  * Re-apply patches for loading our overrides from /usr/share
+  * Re-apply patches for https://bugzilla.gnome.org/show_bug.cgi?id=730101
+  * Re-apply coverage patches from upstream master
+
+ -- Philip Chimento <philip@endlessm.com>  Thu, 11 Jun 2015 12:12:25 -0700
+
+gjs (1.43.3-1) experimental; urgency=medium
+
+  * New upstream release 1.43.3
+    - GTypeClass and GTypeInterface methods, such as
+      g_object_class_list_properties(), are now available
+    - Added full automatic support for GTK widget templates
+    - Added control of JS Date caches to system module
+    - Misc bug fixes and memory leak fixes
+  * debian/watch: Find unstable versions too.
+  * debian/rules: Run dh_install with --fail-missing
+  * debian/control{,.in}: Standards-Version → 3.9.6
+  * debian/patches/0001-tests-Run-under-Xvfb.patch,
+    debian/rules, debian/control{,.in}: Make the testsuite fatal again. Run it
+    under Xvfb (cherry-picked from upstream bug #750688).
+  * debian/control{,.in}: Add missing test-dep on at-spi2-core - there's a
+    warning if it can't be bus activated which fails the test.
+  * debian/tests/installed-tests: Filter out successful activation messages
+    from the dbus daemon which come on stderr and fail the test unnecessarily.
+
+ -- Iain Lane <laney@debian.org>  Wed, 10 Jun 2015 11:40:37 +0100
+
+gjs (1.42.0-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Michael Biebl <biebl@debian.org>  Thu, 02 Oct 2014 00:31:50 +0200
+
+gjs (1.41.91-2) unstable; urgency=medium
+
+  * Upload to unstable.
+
+ -- Andreas Henriksson <andreas@fatal.se>  Fri, 26 Sep 2014 15:46:04 +0200
+
+gjs (1.41.91-1) experimental; urgency=medium
+
+  [ Jackson Doak ]
+  * New upstream development release
+  * debian/control: Bump Gi depends to 1.41.4
+
+  [ Tim Lunn ]
+  * debian/tests:
+    - control: Depend on xauth and dbus > 1.8
+    - Use dbus-run-session to run installed-tests
+
+  [ Andreas Henriksson ]
+  * Don't install .la files in gjs-tests (only .so)
+
+ -- Andreas Henriksson <andreas@fatal.se>  Sat, 06 Sep 2014 10:39:17 -0700
+
+gjs (1.40.1-4) unstable; urgency=medium
+
+  * Actually include debian/tests this time (forgot to svn add it).
+
+ -- Andreas Henriksson <andreas@fatal.se>  Mon, 25 Aug 2014 00:42:23 -0700
+
+gjs (1.40.1-3) unstable; urgency=medium
+
+  * Team upload
+
+  [ Tim Lunn ]
+  * Add installed-tests as autopkgtests
+    + debian/control.in:
+      - set XS-Testsuite for autopkgtests
+      - add -tests package for installed tests
+    + debian/tests: Add autopkgtests
+    + debian/rules:
+      - configure with --enable-installed-tests
+  * Drop lintian overrides no longer needed
+
+ -- Andreas Henriksson <andreas@fatal.se>  Sat, 23 Aug 2014 19:41:05 -0700
+
+gjs (1.40.1-2) unstable; urgency=medium
+
+  * Bump Standards-Version to 3.9.5
+  * Upload to unstable.
+
+ -- Andreas Henriksson <andreas@fatal.se>  Mon, 14 Jul 2014 23:38:13 +0200
+
+gjs (1.40.1-1) experimental; urgency=medium
+
+  * New upstream release.
+
+ -- Andreas Henriksson <andreas@fatal.se>  Fri, 09 May 2014 19:41:11 +0200
+
 gjs (1.40.1-0endless2) unstable; urgency=low
 
   * debian/patches/endless-load-from-share.patch:

@@ -6,12 +6,17 @@ include /usr/share/cdbs/1/rules/utils.mk
 include /usr/share/cdbs/1/rules/autoreconf.mk
 include /usr/share/gnome-pkg-tools/1/rules/gnome-get-source.mk
 
+# configure flags
+DEB_CONFIGURE_EXTRA_FLAGS := --enable-installed-tests
+
 # Use recursive variables since this variable must not be expanded until 
 # files have been installed.
 LIBMOZJS = $(shell objdump -p debian/tmp/usr/lib/libgjs.so | awk '$$1=="NEEDED" && $$2~/^libmozjs/ { print $$2 }' | sed s/\\.so\\./-/ )
 DEB_DH_MAKESHLIBS_ARGS_libgjs0e = -Xusr/lib/gjs-1.0/ -V'libgjs0e (>= $(DEB_UPSTREAM_VERSION)), libgjs0-$(LIBMOZJS)' -- -c4
 
-DEB_MAKE_CHECK_TARGET := check || true
+DEB_MAKE_CHECK_TARGET := check
+
+DEB_DH_INSTALL_ARGS := --fail-missing -X.la
 
 install/libgjs0e::
 	echo gjs:Provides=libgjs0-$(LIBMOZJS) >> debian/$(cdbs_curpkg).substvars

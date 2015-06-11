@@ -194,6 +194,11 @@ const GObjectMeta = new Lang.Class({
                                 configurable: false,
                                 enumerable: false,
                                 value: this.constructor });
+        Object.defineProperty(newClass, '__interfaces__',
+                              { writable: false,
+                                configurable: false,
+                                enumerable: false,
+                                value: interfaces });
 
         return newClass;
     }

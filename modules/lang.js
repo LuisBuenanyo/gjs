@@ -128,6 +128,20 @@ function _parent() {
     if (!previous)
         throw new TypeError("The method '" + name + "' is not on the superclass");
 
+    let interfaces = caller._owner.__interfaces__;
+    if (name === '_init' && interfaces) {
+        for (let iface of interfaces) {
+            for (let property in iface.prototype.__properties__) {
+                property = property.replace('-', '_', 'g');
+                if (property in arguments[0]) {
+                    this[property] = arguments[0][property];
+                    delete arguments[0][property];
+                }
+            }
+        }
+        this.constructor = caller._owner;
+    }
+
     return previous.apply(this, arguments);
 }
 
@@ -408,6 +422,12 @@ Interface.prototype._init = function (params) {
             configurable: false,
             enumerable: false,
             value: params.Requires || [],
+        },
+        '__properties__': {
+            writable: false,
+            configurable: false,
+            enumerable: false,
+            value: params.Properties || {},
         }
     });
 };

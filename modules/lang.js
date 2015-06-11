@@ -217,11 +217,22 @@ Class.prototype._construct = function(params) {
 
     newClass._init.apply(newClass, arguments);
 
+    let interfaces = params.Implements || [];
+
     Object.defineProperty(newClass.prototype, '__metaclass__',
                           { writable: false,
                             configurable: false,
                             enumerable: false,
                             value: this.constructor });
+    Object.defineProperty(newClass.prototype, '__interfaces__',
+                          { writable: false,
+                            configurable: false,
+                            enumerable: false,
+                            value: interfaces });
+
+    interfaces.forEach((iface) => {
+        iface._check(newClass.prototype);
+    });
 
     return newClass;
 };
@@ -230,8 +241,29 @@ Class.prototype._init = function(params) {
     let name = params.Name;
 
     let propertyObj = { };
+
+    let interfaces = params.Implements || [];
+    interfaces.forEach((iface) => {
+        // TODO: DRY
+        Object.getOwnPropertyNames(iface.prototype)
+        .filter((name) => !name.startsWith('_'))
+        .forEach((name) => {
+            let descriptor = Object.getOwnPropertyDescriptor(iface.prototype,
+                name);
+
+            // if (typeof descriptor.value === 'function')
+            //     descriptor.value = this.wrapFunction(name, descriptor.value);
+
+            // we inherit writable and enumerable from the property
+            // descriptor of params (they're both true if created from an
+            // object literal)
+            descriptor.configurable = false;
+            propertyObj[name] = descriptor;
+        });
+    });
+
     Object.getOwnPropertyNames(params).forEach(function(name) {
-        if (name == 'Name' || name == 'Extends' || name == 'Abstract')
+        if (['Name', 'Extends', 'Abstract', 'Implements'].indexOf(name) !== -1)
             return;
 
         let descriptor = Object.getOwnPropertyDescriptor(params, name);
@@ -257,4 +289,125 @@ Class.prototype._init = function(params) {
                     configurable: false,
                     enumerable: false,
                     value: _parent }});
+};
+
+function Interface(params) {
+    return this._construct.apply(this, arguments);
+}
+
+Interface.__super__ = _Base;
+Interface.prototype = Object.create(_Base.prototype);
+Interface.prototype.constructor = Interface;
+Interface.prototype.__name__ = 'Interface';
+
+Interface.prototype._construct = function (params) {
+    if (!params.Name) {
+        throw new TypeError("Interfaces require an explicit 'Name' parameter.");
+    }
+    let name = params.Name;
+
+    let newInterface = function () {
+        throw new TypeError('Cannot instantiate interface ' + name);
+    };
+
+    // Since it's not possible to create a constructor with
+    // a custom [[Prototype]], we have to do this to make
+    // "newInterface instanceof Interface" work, and so we can inherit
+    // methods/properties of Interface.prototype, like _check.
+    newInterface.__proto__ = this.constructor.prototype;
+
+    // newClass.__super__ = parent;
+    // newClass.prototype = Object.create(parent.prototype);
+    newInterface.prototype.constructor = newInterface;
+
+    newInterface._init.apply(newInterface, arguments);
+
+    Object.defineProperty(newInterface.prototype, '__metaclass__', {
+        writable: false,
+        configurable: false,
+        enumerable: false,
+        value: this.constructor,
+    });
+
+    return newInterface;
+};
+
+Interface.prototype._check = function (proto) {
+    let error = [];
+
+    // Check that proto implements all of this interface's required interfaces
+    let interfaces = proto.__interfaces__;
+    this.prototype.__requires__.forEach((required) => {
+        let requiredIndex = interfaces.indexOf(required);
+        if (requiredIndex === -1 || requiredIndex > interfaces.indexOf(this))
+            error.push(required.prototype.__name__);
+    });
+    if (error.length > 0)
+        throw new Error('The following interfaces must be implemented before ' +
+            this.prototype.__name__ + ': ' + error.join(', '));
+
+    // Check that this interface's required methods are implemented
+    Object.getOwnPropertyNames(this.prototype)
+    .filter((p) => this.prototype[p] === null) // means "must be implemented"
+    .forEach((p) => {
+        if (!(p in proto) || proto[p] === null)
+            error.push(p);
+    });
+    if (error.length > 0) {
+        throw new Error('The following members of ' + this.prototype.__name__ +
+            ' are not implemented yet: ' + error.join(', '));
+    }
+};
+
+Interface.prototype.toString = function () {
+    return '[interface ' + this.__name__ + ' for ' + this.prototype.__name__ + ']';
+};
+
+Interface.prototype._init = function (params) {
+    let name = params.Name;
+
+    let propertyObj = {};
+    Object.getOwnPropertyNames(params).forEach((name) => {
+        if (name == 'Name' || name == 'Requires')
+            return;
+
+        let descriptor = Object.getOwnPropertyDescriptor(params, name);
+
+        // FIXME: Why do we have to wrap the function?
+        // if (typeof descriptor.value === 'function')
+        //     descriptor.value = this.wrapFunction(name, descriptor.value);
+
+        // Create wrappers on the interface object so that generics work (e.g.
+        // SomeInterface.some_function(blah) instead of
+        // SomeInterface.prototype.some_function.apply(this, blah)
+        if (typeof descriptor.value === 'function') {
+            let interfaceProto = this.prototype;
+            this[name] = function () {
+                return interfaceProto[name].apply(this, arguments);
+            };
+        }
+
+        // we inherit writable and enumerable from the property
+        // descriptor of params (they're both true if created from an
+        // object literal)
+        descriptor.configurable = false;
+
+        propertyObj[name] = descriptor;
+    });
+
+    Object.defineProperties(this.prototype, propertyObj);
+    Object.defineProperties(this.prototype, {
+        '__name__': {
+            writable: false,
+            configurable: false,
+            enumerable: false,
+            value: name,
+        },
+        '__requires__': {
+            writable: false,
+            configurable: false,
+            enumerable: false,
+            value: params.Requires || [],
+        }
+    });
 };

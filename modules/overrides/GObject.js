@@ -113,7 +113,6 @@ const GObjectMeta = new Lang.Class({
 
         let interfaces = params.Implements || [];
         let properties = params.Properties;
-        delete params.Implements;
         delete params.Properties;
 
 	let propertiesArray = [];

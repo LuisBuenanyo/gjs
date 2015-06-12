@@ -38,6 +38,9 @@
 typedef struct {
     GIInterfaceInfo *info;
     GType gtype;
+    /* the GObjectClass wrapped by this JS Object (only used for
+       prototypes) */
+    GTypeInterface *vtable;
 } Interface;
 
 extern struct JSClass gjs_interface_class;
@@ -59,6 +62,11 @@ interface_finalize(JSFreeOp *fop,
 
     if (priv->info != NULL)
         g_base_info_unref((GIBaseInfo*)priv->info);
+
+    if (priv->vtable) {
+        g_type_default_interface_unref (priv->vtable);
+        priv->vtable = NULL;
+    }
 
     GJS_DEC_COUNTER(interface);
     g_slice_free(Interface, priv);
@@ -276,6 +284,7 @@ gjs_define_interface_class(JSContext       *context,
     priv = g_slice_new0(Interface);
     priv->info = info;
     priv->gtype = gtype;
+    priv->vtable = (GTypeInterface*) g_type_default_interface_ref (gtype);
     if (info)
         g_base_info_ref((GIBaseInfo*)priv->info);
     JS_SetPrivate(prototype, priv);

@@ -185,7 +185,7 @@ function testGObjectInterfaceIsInstanceOfInterfaces() {
     JSUnit.assertTrue(MyGObjectInterface instanceof GObject.Interface);
 }
 
-function testCanInstatntiate() {
+function testCanInstantiate() {
     new MyGObject();
 }
 

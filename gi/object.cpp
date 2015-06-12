@@ -2618,7 +2618,7 @@ gjs_register_interface(JSContext *cx,
     g_type_query(G_TYPE_INTERFACE, &query);
 
     type_info.class_size = query.class_size;
-    type_info.instance_size = query.instance_size;
+    // type_info.instance_size = query.instance_size;
 
     type_module = G_TYPE_MODULE (gjs_type_module_get());
     interface_type = g_type_module_register_type(type_module,

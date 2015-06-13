@@ -122,7 +122,8 @@ const MyOtherGObject = new Lang.Class({
 });
 
 function testGObjectClassCanImplementInterface() {
-    new MyInterfaceGObject();
+    let obj = new MyInterfaceGObject();
+    JSUnit.assertTrue(obj.constructor.implements(MyInterface));
 }
 
 function testGObjectCanImplementInterfacesFromJSAndC() {
@@ -135,7 +136,9 @@ function testGObjectCanImplementInterfacesFromJSAndC() {
             this.parent(props);
         }
     });
-    new MyHybridObject();
+    let obj = new MyHybridObject();
+    JSUnit.assertTrue(obj.constructor.implements(MyInterface));
+    JSUnit.assertTrue(obj.constructor.implements(Gio.Initable));
 }
 
 function testGObjectInterfaceIsInstanceOfInterfaces() {
@@ -152,7 +155,8 @@ function testGObjectInterfaceTypeName() {
 }
 
 function testGObjectCanImplementInterface() {
-    new MyGObject();
+    let obj = new MyGObject();
+    JSUnit.assertTrue(obj.constructor.implements(MyGObjectInterface));
 }
 
 function testGObjectImplementingInterfaceHasCorrectClassObject() {
@@ -179,7 +183,9 @@ function testGObjectCanImplementBothGObjectAndNonGObjectInterfaces() {
         required: function () {},
         requiredG: function () {}
     });
-    new MyHybridGObject();
+    let obj = new MyHybridGObject();
+    JSUnit.assertTrue(obj.constructor.implements(MyInterface));
+    JSUnit.assertTrue(obj.constructor.implements(MyGObjectInterface));
 }
 
 function testGObjectCanImplementRequiredFunction() {
@@ -200,7 +206,8 @@ function testGObjectMustImplementRequiredFunction () {
 }
 
 function testGObjectDoesntHaveToImplementOptionalFunction() {
-    new MyMinimalGObject();
+    let obj = new MyMinimalGObject();
+    JSUnit.assertTrue(obj.constructor.implements(MyGObjectInterface));
 }
 
 function testGObjectCanDeferToInterfaceOptionalFunction() {
@@ -214,7 +221,9 @@ function testGObjectCanChainUpToInterface() {
 }
 
 function testGObjectInterfaceCanRequireOtherInterface() {
-    new MyOtherGObject();
+    let obj = new MyOtherGObject();
+    JSUnit.assertTrue(obj.constructor.implements(MyGObjectInterface));
+    JSUnit.assertTrue(obj.constructor.implements(MyOtherGObjectInterface));
 }
 
 function testGObjectInterfaceCanChainUpToOtherInterface() {
@@ -327,6 +336,27 @@ function testInterfaceIsOfCorrectTypeForMetaclass() {
         Requires: [ MyMetaObject ]
     });
     JSUnit.assertTrue(MyMetaInterface instanceof GObject.Interface);
+}
+
+function testSubclassImplementsTheSameInterfaceAsItsParent() {
+    const SubObject = new Lang.Class({
+        Name: 'SubObject',
+        Extends: MyGObject
+    });
+    let obj = new SubObject();
+    JSUnit.assertTrue(obj.constructor.implements(MyGObjectInterface));
+    JSUnit.assertEquals('foobar', obj.interface_prop);  // override not needed
+}
+
+function testSubclassCanReimplementTheSameInterfaceAsItsParent() {
+    const SubImplementer = new Lang.Class({
+        Name: 'SubImplementer',
+        Extends: MyGObject,
+        Implements: [ MyGObjectInterface ]
+    });
+    let obj = new SubImplementer();
+    JSUnit.assertTrue(obj.constructor.implements(MyGObjectInterface));
+    JSUnit.assertEquals('foobar', obj.interface_prop);  // override not needed
 }
 
 JSUnit.gjstestRun(this, JSUnit.setUp, JSUnit.tearDown);

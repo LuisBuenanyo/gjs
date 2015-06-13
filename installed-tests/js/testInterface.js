@@ -104,7 +104,8 @@ function testInterfaceCannotBeInstantiated() {
 }
 
 function testObjectCanImplementInterface() {
-    new MyObject();
+    let obj = new MyObject();
+    JSUnit.assertTrue(obj.constructor.implements(MyInterface));
 }
 
 function testObjectImplementingInterfaceHasCorrectConstructor() {
@@ -125,7 +126,8 @@ function testClassMustImplementRequiredFunction() {
 }
 
 function testClassDoesntHaveToImplementOptionalFunction() {
-    new MyMinimalObject();
+    let obj = new MyMinimalObject();
+    JSUnit.assertTrue(obj.constructor.implements(MyInterface));
 }
 
 function testObjectCanDeferToInterfaceOptionalFunction() {
@@ -174,7 +176,9 @@ function testObjectCanOverrideInterfaceSetter() {
 }
 
 function testInterfaceCanRequireOtherInterface() {
-    new MyOtherObject();
+    let obj = new MyOtherObject();
+    JSUnit.assertTrue(obj.constructor.implements(MyInterface));
+    JSUnit.assertTrue(obj.constructor.implements(MyOtherInterface));
 }
 
 function testInterfaceCanChainUpToOtherInterface() {
@@ -229,7 +233,9 @@ function testInterfacesCanBeImplementedOnAParentClass() {
         Extends: MyObject,
         Implements: [ MyOtherInterface ],
     });
-    new MyParentalObject();
+    let obj = new MyParentalObject();
+    JSUnit.assertTrue(obj.constructor.implements(MyInterface));
+    JSUnit.assertTrue(obj.constructor.implements(MyOtherInterface));
 }
 
 function testInterfacesCanRequireBeingImplementedOnASubclass() {
@@ -238,7 +244,10 @@ function testInterfacesCanRequireBeingImplementedOnASubclass() {
         Extends: MyObject,
         Implements: [ MyOtherInterface, MyDemandingInterface ]
     });
-    new MyConformingObject();
+    let obj = new MyConformingObject();
+    JSUnit.assertTrue(obj.constructor.implements(MyInterface));
+    JSUnit.assertTrue(obj.constructor.implements(MyOtherInterface));
+    JSUnit.assertTrue(obj.constructor.implements(MyDemandingInterface));
 }
 
 function testObjectsMustSubclassIfRequired() {
@@ -252,6 +261,25 @@ function testObjectsMustSubclassIfRequired() {
 function testInterfaceMethodsCanCallOtherInterfaceMethods() {
     let obj = new MyObject();
     JSUnit.assertEquals('interface private method', obj.usesThis());
+}
+
+function testSubclassImplementsTheSameInterfaceAsItsParent() {
+    const SubObject = new Lang.Class({
+        Name: 'SubObject',
+        Extends: MyObject
+    });
+    let obj = new SubObject();
+    JSUnit.assertTrue(obj.constructor.implements(MyInterface));
+}
+
+function testSubclassCanReimplementTheSameInterfaceAsItsParent() {
+    const SubImplementer = new Lang.Class({
+        Name: 'SubImplementer',
+        Extends: MyObject,
+        Implements: [ MyInterface ]
+    });
+    let obj = new SubImplementer();
+    JSUnit.assertTrue(obj.constructor.implements(MyInterface));
 }
 
 JSUnit.gjstestRun(this, JSUnit.setUp, JSUnit.tearDown);

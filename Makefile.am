@@ -114,6 +114,7 @@ libgjs_la_SOURCES =		\
 	gjs/importer.cpp		\
 	gjs/gi.h		\
 	gjs/gi.cpp		\
+	gjs/coverage-private.h	\
 	gjs/coverage.cpp \
 	gjs/jsapi-private.cpp	\
 	gjs/jsapi-util.cpp	\

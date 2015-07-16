@@ -300,14 +300,6 @@ copy_source_file_to_coverage_output(const char *source,
     g_object_unref(source_file);
 }
 
-typedef struct _StatisticsPrintUserData {
-    GjsContext        *reflection_context;
-    GFileOutputStream *ostream;
-    const gchar       *output_directory;
-    JSContext         *context;
-    JSObject          *object;
-} StatisticsPrintUserData;
-
 /* This function will strip a URI scheme and return
  * the string with the URI scheme stripped or NULL
  * if the path was not a valid URI
@@ -1225,6 +1217,8 @@ coverage_statistics_has_stale_cache(GjsCoverage *coverage)
     return JSVAL_TO_BOOLEAN(stale_cache_value);
 }
 
+static unsigned int _suppressed_coverage_messages_count = 0;
+
 void
 gjs_coverage_write_statistics(GjsCoverage *coverage,
                               const char  *output_directory)
@@ -1243,7 +1237,6 @@ gjs_coverage_write_statistics(GjsCoverage *coverage,
                                                "coverage.lcov",
                                                NULL);
     GFile *output_file = g_file_new_for_commandline_arg(output_file_path);
-    g_free(output_file_path);
 
     GOutputStream *ostream =
         G_OUTPUT_STREAM(g_file_append_to(output_file,
@@ -1281,6 +1274,15 @@ gjs_coverage_write_statistics(GjsCoverage *coverage,
         g_bytes_unref(cache_data);
     }
 
+    g_message("Wrote coverage statistics to %s", output_file_path);
+    if (_suppressed_coverage_messages_count) {
+        g_message("There were %i suppressed message(s) when collecting "
+                  "coverage, set GJS_SHOW_COVERAGE_MESSAGES to see them.",
+                  _suppressed_coverage_messages_count);
+        _suppressed_coverage_messages_count = 0;
+    }
+
+    g_free(output_file_path);
     g_array_unref(file_statistics_array);
     g_object_unref(ostream);
     g_object_unref(output_file);
@@ -1345,21 +1347,27 @@ gjs_context_eval_file_in_compartment(GjsContext *context,
 }
 
 static JSBool
-coverage_warning(JSContext *context,
-                 unsigned   argc,
-                 jsval     *vp)
+coverage_log(JSContext *context,
+             unsigned   argc,
+             jsval     *vp)
 {
-    jsval *argv = JS_ARGV(context, vp);
+    JS::CallArgs argv = JS::CallArgsFromVp (argc, vp);
     char *s;
     JSExceptionState *exc_state;
     JSString *jstr;
 
     if (argc != 1) {
-        gjs_throw(context, "Must pass a single argument to warning()");
+        gjs_throw(context, "Must pass a single argument to log()");
         return JS_FALSE;
     }
 
     JS_BeginRequest(context);
+
+    if (!g_getenv("GJS_SHOW_COVERAGE_MESSAGES")) {
+        _suppressed_coverage_messages_count++;
+        argv.rval().set(JSVAL_VOID);
+        return JS_TRUE;
+    }
 
     /* JS_ValueToString might throw, in which we will only
      *log that the value could be converted to string */
@@ -1380,11 +1388,11 @@ coverage_warning(JSContext *context,
         return JS_FALSE;
     }
 
-    g_message("JS COVERAGE WARNING: %s", s);
+    g_message("JS COVERAGE MESSAGE: %s", s);
     g_free(s);
 
     JS_EndRequest(context);
-    JS_SET_RVAL(context, vp, JSVAL_VOID);
+    argv.rval().set(JSVAL_VOID);
     return JS_TRUE;
 }
 
@@ -1522,7 +1530,7 @@ coverage_get_file_contents(JSContext *context,
 }
 
 static JSFunctionSpec coverage_funcs[] = {
-    { "warning", JSOP_WRAPPER(coverage_warning), 1, GJS_MODULE_PROP_FLAGS },
+    { "log", JSOP_WRAPPER(coverage_log), 1, GJS_MODULE_PROP_FLAGS },
     { "getFileContents", JSOP_WRAPPER(coverage_get_file_contents), 1, GJS_MODULE_PROP_FLAGS },
     { "getFileModificationTime", JSOP_WRAPPER(coverage_get_file_modification_time), 1, GJS_MODULE_PROP_FLAGS },
     { "getFileChecksum", JSOP_WRAPPER(coverage_get_file_checksum), 1, GJS_MODULE_PROP_FLAGS },

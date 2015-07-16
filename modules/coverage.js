@@ -219,6 +219,7 @@ function functionsForNode(node) {
     switch (node.type) {
     case 'FunctionDeclaration':
     case 'FunctionExpression':
+    case 'ArrowExpression':
         functionNames.push({ key: _getFunctionKeyFromReflectedFunction(node),
                              line: node.loc.start.line,
                              n_params: node.params.length });
@@ -476,13 +477,27 @@ function _branchesToBranchCounters(branches, nLines) {
     return counters;
 }
 
-function _functionsToFunctionCounters(functions) {
+function _functionsToFunctionCounters(script, functions) {
     let functionCounters = {};
 
     functions.forEach(function(func) {
-        functionCounters[func.key] = {
-            hitCount: 0
-        };
+        let [name, line, args] = func.key.split(':');
+
+        if (functionCounters[name] === undefined) {
+            functionCounters[name] = {};
+        }
+
+        if (functionCounters[name][line] === undefined) {
+            functionCounters[name][line] = {};
+        }
+
+        if (functionCounters[name][line][args] === undefined) {
+            functionCounters[name][line][args] = { hitCount: 0 };
+        } else {
+            log(script + ':' + line + ' Function identified as ' +
+                func.key + ' already seen in this file. Function coverage ' +
+                'will be incomplete.');
+        }
     });
 
     return functionCounters;
@@ -496,6 +511,59 @@ function _populateKnownFunctions(functions, nLines) {
     });
 
     return knownFunctions;
+}
+
+function _identifyFunctionCounterInLinePartForDescription(linePart,
+                                                          nArgs) {
+    /* There is only one potential option for this line. We might have been
+     * called with the wrong number of arguments, but it doesn't matter. */
+    if (Object.getOwnPropertyNames(linePart).length === 1)
+        return linePart[Object.getOwnPropertyNames(linePart)[0]];
+
+    /* Have to disambiguate using nArgs and we have an exact match. */
+    if (linePart[nArgs] !== undefined)
+        return linePart[nArgs];
+
+    /* There are multiple options on this line. Pick the one where
+     * we satisfy the number of arguments exactly, or failing that,
+     * go through each and pick the closest. */
+    let allNArgsOptions = Object.keys(linePart).map(function(key) {
+        return parseInt(key);
+    });
+
+    let closest = allNArgsOptions.reduce(function(prev, current, index, array) {
+        let nArgsOption = array[index];
+        if (Math.abs(nArgsOption - nArgs) < Math.abs(current - nArgs)) {
+            return nArgsOption;
+        }
+
+        return current;
+    });
+
+    return linePart[String(closest)];
+}
+
+function _identifyFunctionCounterForDescription(functionCounters,
+                                                name,
+                                                line,
+                                                nArgs) {
+    let candidateCounter = functionCounters[name];
+
+    if (candidateCounter === undefined)
+        return null;
+
+    if (Object.getOwnPropertyNames(candidateCounter).length === 1) {
+        let linePart = candidateCounter[Object.getOwnPropertyNames(candidateCounter)[0]];
+        return _identifyFunctionCounterInLinePartForDescription(linePart, nArgs);
+    }
+
+    let linePart = functionCounters[name][line];
+
+    if (linePart === undefined) {
+        return null;
+    }
+
+    return _identifyFunctionCounterInLinePartForDescription(linePart, nArgs);
 }
 
 /**
@@ -516,25 +584,30 @@ function _incrementFunctionCounters(functionCounters,
                                     name,
                                     line,
                                     nArgs) {
-    let functionKey = name + ':' + line + ':' + nArgs;
-    let functionCountersForKey = functionCounters[functionKey];
+    let functionCountersForKey = _identifyFunctionCounterForDescription(functionCounters,
+                                                                        name,
+                                                                        line,
+                                                                        nArgs);
 
     /* Its possible that the JS Engine might enter a funciton
      * at an executable line which is a little bit past the
      * actual definition. Roll backwards until we reach the
      * last known function definition line which we kept
      * track of earlier to see if we can find this function first */
-    if (functionCountersForKey === undefined) {
+    if (functionCountersForKey === null) {
         do {
             --line;
-            functionKey = name + ':' + line + ':' + nArgs;
-            functionCountersForKey = functionCounters[functionKey];
+            functionCountersForKey = _identifyFunctionCounterForDescription(functionCounters,
+                                                                            name,
+                                                                            line,
+                                                                            nArgs);
         } while (linesWithKnownFunctions[line] !== true && line > 0);
     }
 
-    if (functionCountersForKey !== undefined) {
+    if (functionCountersForKey !== null) {
         functionCountersForKey.hitCount++;
     } else {
+        let functionKey = [name, line, nArgs].join(':');
         throw new Error("expected Reflect to find function " + functionKey);
     }
 }
@@ -545,12 +618,10 @@ function _incrementFunctionCounters(functionCounters,
  * expressonCounters: An array of either a hit count for a found
  * executable line or undefined for a known non-executable line.
  * line: an executed line
- * reporter: A function a single integer to report back when
- * we executed lines that we didn't expect
  */
 function _incrementExpressionCounters(expressionCounters,
-                                      offsetLine,
-                                      reporter) {
+                                      script,
+                                      offsetLine) {
     let expressionCountersLen = expressionCounters.length;
 
     if (offsetLine >= expressionCountersLen)
@@ -560,7 +631,7 @@ function _incrementExpressionCounters(expressionCounters,
      * mean that the reflection machinery is not doing its job, so we should
      * print a debug message about it in case someone is interested.
      *
-     * The reason why we don't have a proper warning is because it
+     * The reason why we don't have a proper log is because it
      * is difficult to determine what the SpiderMonkey program counter
      * will actually pass over, especially function declarations for some
      * reason:
@@ -575,9 +646,8 @@ function _incrementExpressionCounters(expressionCounters,
      * and BlockStatement, neither of which would ordinarily be
      * executed */
     if (expressionCounters[offsetLine] === undefined) {
-        if (reporter !== undefined)
-            reporter(offsetLine);
-
+        log(script + ':' + offsetLine + ' Executed line previously marked ' +
+            'non-executable by Reflect');
         expressionCounters[offsetLine] = 0;
     }
 
@@ -616,16 +686,24 @@ function _BranchTracker(branchCounters) {
 
 function _convertFunctionCountersToArray(functionCounters) {
     let arrayReturn = [];
-    /* functionCounters is an object so convert it to
+    /* functionCounters is an object so explore it to create a
+     * set of function keys and then convert it to
      * an array-of-object using the key as a property
      * of that object */
-    for (let key of Object.getOwnPropertyNames(functionCounters)) {
-        let func = functionCounters[key];
-        /* The name of the function contains its line, after the first
-         * colon. Split the name and retrieve it here */
-        arrayReturn.push({ name: key,
-                           line: Number(key.split(':')[1]),
-                           hitCount: func.hitCount });
+    for (let name of Object.getOwnPropertyNames(functionCounters)) {
+        let namePart = functionCounters[name];
+
+        for (let line of Object.getOwnPropertyNames(namePart)) {
+            let linePart = functionCounters[name][line];
+
+            for (let nArgs of Object.getOwnPropertyNames(linePart)) {
+                let functionKey = [name, line, nArgs].join(':');
+                arrayReturn.push({ name: functionKey,
+                                   line: Number(line),
+                                   nArgs: nArgs,
+                                   hitCount: linePart[nArgs].hitCount });
+            }
+        }
     }
 
     arrayReturn.sort(function(left, right) {
@@ -664,7 +742,7 @@ function _fetchCountersFromCache(filename, cache, nLines) {
         return {
             expressionCounters: _expressionLinesToCounters(cache_for_file.lines, nLines),
             branchCounters: _branchesToBranchCounters(cache_for_file.branches, nLines),
-            functionCounters: _functionsToFunctionCounters(functions),
+            functionCounters: _functionsToFunctionCounters(filename, functions),
             linesWithKnownFunctions: _populateKnownFunctions(functions, nLines),
             nLines: nLines
         };
@@ -673,14 +751,14 @@ function _fetchCountersFromCache(filename, cache, nLines) {
     return null;
 }
 
-function _fetchCountersFromReflection(contents, nLines) {
+function _fetchCountersFromReflection(filename, contents, nLines) {
     let reflection = Reflect.parse(contents);
     let functions = functionsForAST(reflection);
 
     return {
         expressionCounters: _expressionLinesToCounters(expressionLinesForAST(reflection), nLines),
         branchCounters: _branchesToBranchCounters(branchesForAST(reflection), nLines),
-        functionCounters: _functionsToFunctionCounters(functions),
+        functionCounters: _functionsToFunctionCounters(filename, functions),
         linesWithKnownFunctions: _populateKnownFunctions(functions, nLines),
         nLines: nLines
     };
@@ -689,7 +767,7 @@ function _fetchCountersFromReflection(contents, nLines) {
 function CoverageStatisticsContainer(prefixes, cache) {
     /* Copy the files array, so that it can be re-used in the tests */
     let cachedASTs = cache !== undefined ? JSON.parse(cache) : null;
-    let coveredFiles = {}
+    let coveredFiles = {};
     let cacheMisses = 0;
 
     function wantsStatisticsFor(filename) {
@@ -705,7 +783,7 @@ function CoverageStatisticsContainer(prefixes, cache) {
         let counters = _fetchCountersFromCache(filename, cachedASTs, nLines);
         if (counters === null) {
             cacheMisses++;
-            counters = _fetchCountersFromReflection(contents, nLines);
+            counters = _fetchCountersFromReflection(filename, contents, nLines);
         }
 
         if (counters === null)
@@ -727,7 +805,7 @@ function CoverageStatisticsContainer(prefixes, cache) {
     }
 
     this.stringify = function() {
-        let cache_data = {}
+        let cache_data = {};
         Object.keys(coveredFiles).forEach(function(filename) {
             let statisticsForFilename = coveredFiles[filename];
             let mtime = getFileModificationTime(filename);
@@ -736,10 +814,10 @@ function CoverageStatisticsContainer(prefixes, cache) {
                 checksum: mtime === null ? getFileChecksum(filename) : null,
                 lines: [],
                 branches: [],
-                functions: Object.keys(statisticsForFilename.functionCounters).map(function(key) {
+                functions: _convertFunctionCountersToArray(statisticsForFilename.functionCounters).map(function(func) {
                     return {
-                        key: key,
-                        line: Number(key.split(':')[1])
+                        key: func.name,
+                        line: func.line
                     };
                 })
             };
@@ -754,7 +832,7 @@ function CoverageStatisticsContainer(prefixes, cache) {
                      cacheDataForFilename.lines.push(line_index);
 
                  if (statisticsForFilename.branchCounters[line_index] !== undefined) {
-                     let branchCounters = statisticsForFilename.branchCounters[line_index]
+                     let branchCounters = statisticsForFilename.branchCounters[line_index];
                      cacheDataForFilename.branches.push({
                          point: statisticsForFilename.branchCounters[line_index].point,
                          exits: statisticsForFilename.branchCounters[line_index].exits.map(function(exit) {
@@ -763,27 +841,17 @@ function CoverageStatisticsContainer(prefixes, cache) {
                      });
                  }
             }
-            cacheDataForFilename.functions = Object.keys(statisticsForFilename.functionCounters).map(function(key) {
-                return {
-                    key: key,
-                    line: Number(key.split(':')[1])
-                };
-            });
             cache_data[filename] = cacheDataForFilename;
         });
         return JSON.stringify(cache_data);
-    }
+    };
 
     this.getCoveredFiles = function() {
         return Object.keys(coveredFiles);
     };
 
     this.fetchStatistics = function(filename) {
-        let statistics = ensureStatisticsFor(filename);
-
-        if (statistics === undefined)
-            throw new Error('Not tracking statistics for ' + filename);
-        return statistics;
+        return ensureStatisticsFor(filename);
     };
 
     this.staleCache = function() {
@@ -835,16 +903,20 @@ function CoverageStatistics(prefixes, cache) {
 
         try {
             statistics = fetchStatistics(frame.script.url);
+            if (!statistics) {
+                return undefined;
+            }
         } catch (e) {
             /* We don't care about this frame, return */
+            log(e.message + " " + e.stack);
             return undefined;
         }
 
         function _logExceptionAndReset(exception, callee, line) {
-            warning(exception.fileName + ":" + exception.lineNumber + " (processing " +
-                    frame.script.url + ":" + callee + ":" + line + ") - " +
-                    exception.message);
-            warning("Will not log statistics for this file");
+            log(exception.fileName + ":" + exception.lineNumber +
+                " (processing " + frame.script.url + ":" + callee + ":" +
+                line + ") - " + exception.message);
+            log("Will not log statistics for this file");
             frame.onStep = undefined;
             frame._branchTracker = undefined;
             deleteStatistics(frame.script.url);
@@ -881,15 +953,8 @@ function CoverageStatistics(prefixes, cache) {
 
             try {
                 _incrementExpressionCounters(statistics.expressionCounters,
-                                             offsetLine,
-                                             function(line) {
-                                                 warning("executed " +
-                                                         frame.script.url +
-                                                         ":" +
-                                                         line +
-                                                         " which we thought" +
-                                                         " wasn't executable");
-                                             });
+                                             frame.script.url,
+                                             offsetLine);
                 this._branchTracker.incrementBranchCounters(offsetLine);
             } catch (e) {
                 /* Something bad happened. Log the exception and delete

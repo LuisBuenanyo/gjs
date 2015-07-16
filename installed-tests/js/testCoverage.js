@@ -173,6 +173,22 @@ function testExpressionLinesFoundForCaseStatementsCharacters() {
                       JSUnit.assertEquals);
 }
 
+function testExpressionLinesFoundForCaseStatementsCharacters() {
+    let foundLinesInsideCaseStatements =
+        parseScriptForExpressionLines("var a = 'a';\n" +
+                                      "switch (a) {\n" +
+                                      "case 'a':\n" +
+                                      "    a++;\n" +
+                                      "    break;\n" +
+                                      "case 'b':\n" +
+                                      "    a++;\n" +
+                                      "    break;\n" +
+                                      "}\n");
+    assertArrayEquals(foundLinesInsideCaseStatements,
+                      [1, 2, 4, 5, 7, 8],
+                      JSUnit.assertEquals);
+}
+
 function testExpressionLinesFoundForLoop() {
     let foundLinesInsideLoop =
         parseScriptForExpressionLines("for (let i = 0; i < 1; i++) {\n" +
@@ -362,6 +378,7 @@ function testFunctionsInsideArrowExpression() {
 
     assertArrayEquals(foundFunctions,
                       [
+                          { key: "(anonymous):1:1", line: 1, n_params: 1 },
                           { key: "(anonymous):1:0", line: 1, n_params: 0 }
                       ],
                       functionDeclarationsEqual);
@@ -954,8 +971,6 @@ function testFunctionKeyFromFunctionWithoutNameIsAnonymous() {
     JSUnit.assertEquals(expectedFunctionKey, functionKeyForAnonymousFunction);
 }
 
-
-
 function testFunctionCounterMapReturnedForFunctionKeys() {
     let ast = {
         body: [{
@@ -977,10 +992,72 @@ function testFunctionCounterMapReturnedForFunctionKeys() {
     };
 
     let detectedFunctions = Coverage.functionsForAST(ast);
-    let functionKey = Coverage._getFunctionKeyFromReflectedFunction(ast.body[0]);
-    let functionCounters = Coverage._functionsToFunctionCounters(detectedFunctions);
+    let functionCounters = Coverage._functionsToFunctionCounters('script',
+                                                                 detectedFunctions);
 
-    JSUnit.assertEquals(0, functionCounters[functionKey].hitCount);
+    JSUnit.assertEquals(0, functionCounters.name['1']['0'].hitCount);
+}
+
+function _fetchLogMessagesFrom(func) {
+    let oldLog = window.log;
+    let collectedMessages = [];
+    window.log = function(message) {
+        collectedMessages.push(message);
+    };
+
+    try {
+        func.apply(this, arguments);
+    } finally {
+        window.log = oldLog;
+    }
+
+    return collectedMessages;
+}
+
+function testErrorReportedWhenTwoIndistinguishableFunctionsPresent() {
+    let ast = {
+        body: [{
+            type: 'FunctionDeclaration',
+            id: {
+                name: '(anonymous)'
+            },
+            loc: {
+              start: {
+                  line: 1
+              }
+            },
+            params: [],
+            body: {
+                type: 'BlockStatement',
+                body: []
+            }
+        }, {
+            type: 'FunctionDeclaration',
+            id: {
+                name: '(anonymous)'
+            },
+            loc: {
+              start: {
+                  line: 1
+              }
+            },
+            params: [],
+            body: {
+                type: 'BlockStatement',
+                body: []
+            }
+        }]
+    };
+
+    let detectedFunctions = Coverage.functionsForAST(ast);
+    let messages = _fetchLogMessagesFrom(function() {
+        Coverage._functionsToFunctionCounters('script', detectedFunctions);
+    });
+
+    JSUnit.assertEquals('script:1 Function identified as (anonymous):1:0 ' +
+                        'already seen in this file. Function coverage will ' +
+                        'be incomplete.',
+                        messages[0]);
 }
 
 function testKnownFunctionsArrayPopulatedForFunctions() {
@@ -997,14 +1074,65 @@ function testKnownFunctionsArrayPopulatedForFunctions() {
 }
 
 function testIncrementFunctionCountersForFunctionOnSameExecutionStartLine() {
-    let functionKey = 'f:1:0';
-    let functionCounters = {};
-
-    functionCounters[functionKey] = { hitCount: 0 };
-
+    let functionCounters = Coverage._functionsToFunctionCounters('script', [
+        { key: 'f:1:0',
+          line: 1,
+          n_params: 0 }
+    ]);
     Coverage._incrementFunctionCounters(functionCounters, null, 'f', 1, 0);
 
-    JSUnit.assertEquals(functionCounters[functionKey].hitCount, 1);
+    JSUnit.assertEquals(functionCounters.f['1']['0'].hitCount, 1);
+}
+
+function testIncrementFunctionCountersCanDisambiguateTwoFunctionsWithSameName() {
+    let functionCounters = Coverage._functionsToFunctionCounters('script', [
+        { key: '(anonymous):1:0',
+          line: 1,
+          n_params: 0 },
+        { key: '(anonymous):2:0',
+          line: 2,
+          n_params: 0 }
+    ]);
+    Coverage._incrementFunctionCounters(functionCounters, null, '(anonymous)', 1, 0);
+    Coverage._incrementFunctionCounters(functionCounters, null, '(anonymous)', 2, 0);
+
+    JSUnit.assertEquals(functionCounters['(anonymous)']['1']['0'].hitCount, 1);
+    JSUnit.assertEquals(functionCounters['(anonymous)']['2']['0'].hitCount, 1);
+}
+
+function testIncrementFunctionCountersCanDisambiguateTwoFunctionsOnSameLineWithDifferentParams() {
+    let functionCounters = Coverage._functionsToFunctionCounters('script', [
+        { key: '(anonymous):1:0',
+          line: 1,
+          n_params: 0 },
+        { key: '(anonymous):1:1',
+          line: 1,
+          n_params: 1 }
+    ]);
+    Coverage._incrementFunctionCounters(functionCounters, null, '(anonymous)', 1, 0);
+    Coverage._incrementFunctionCounters(functionCounters, null, '(anonymous)', 1, 1);
+
+    JSUnit.assertEquals(functionCounters['(anonymous)']['1']['0'].hitCount, 1);
+    JSUnit.assertEquals(functionCounters['(anonymous)']['1']['1'].hitCount, 1);
+}
+
+function testIncrementFunctionCountersCanDisambiguateTwoFunctionsOnSameLineByGuessingClosestParams() {
+    let functionCounters = Coverage._functionsToFunctionCounters('script', [
+        { key: '(anonymous):1:0',
+          line: 1,
+          n_params: 0 },
+        { key: '(anonymous):1:3',
+          line: 1,
+          n_params: 3 }
+    ]);
+
+    /* Eg, we called the function with 3 params with just two arguments. We
+     * should be able to work out that we probably intended to call the
+     * latter function as opposed to the former. */
+    Coverage._incrementFunctionCounters(functionCounters, null, '(anonymous)', 1, 2);
+
+    JSUnit.assertEquals(functionCounters['(anonymous)']['1']['0'].hitCount, 0);
+    JSUnit.assertEquals(functionCounters['(anonymous)']['1']['3'].hitCount, 1);
 }
 
 function testIncrementFunctionCountersForFunctionOnEarlierStartLine() {
@@ -1028,15 +1156,15 @@ function testIncrementFunctionCountersForFunctionOnEarlierStartLine() {
     };
 
     let detectedFunctions = Coverage.functionsForAST(ast);
-    let functionKey = Coverage._getFunctionKeyFromReflectedFunction(ast.body[0]);
     let knownFunctionsArray = Coverage._populateKnownFunctions(detectedFunctions, 3);
-    let functionCounters = Coverage._functionsToFunctionCounters(detectedFunctions);
+    let functionCounters = Coverage._functionsToFunctionCounters('script',
+                                                                 detectedFunctions);
 
     /* We're entering at line two, but the function definition was actually
      * at line one */
     Coverage._incrementFunctionCounters(functionCounters, knownFunctionsArray, 'name', 2, 0);
 
-    JSUnit.assertEquals(functionCounters[functionKey].hitCount, 1);
+    JSUnit.assertEquals(functionCounters.name['1']['0'].hitCount, 1);
 }
 
 function testIncrementFunctionCountersThrowsErrorOnUnexpectedFunction() {
@@ -1061,7 +1189,8 @@ function testIncrementFunctionCountersThrowsErrorOnUnexpectedFunction() {
     let detectedFunctions = Coverage.functionsForAST(ast);
     let functionKey = Coverage._getFunctionKeyFromReflectedFunction(ast.body[0]);
     let knownFunctionsArray = Coverage._populateKnownFunctions(detectedFunctions, 3);
-    let functionCounters = Coverage._functionsToFunctionCounters(detectedFunctions);
+    let functionCounters = Coverage._functionsToFunctionCounters('script',
+                                                                 detectedFunctions);
 
     /* We're entering at line two, but the function definition was actually
      * at line one */
@@ -1081,7 +1210,7 @@ function testIncrementExpressionCountersThrowsIfLineOutOfRange() {
     ];
 
     JSUnit.assertRaises(function() {
-        Coverage._incrementExpressionCounters(expressionCounters, 2);
+        Coverage._incrementExpressionCounters(expressionCounters, 'script', 2);
     });
 }
 
@@ -1091,7 +1220,7 @@ function testIncrementExpressionCountersIncrementsIfInRange() {
         0
     ];
 
-    Coverage._incrementExpressionCounters(expressionCounters, 1);
+    Coverage._incrementExpressionCounters(expressionCounters, 'script', 1);
     JSUnit.assertEquals(1, expressionCounters[1]);
 }
 
@@ -1102,16 +1231,13 @@ function testWarnsIfWeHitANonExecutableLine() {
         undefined
     ];
 
-    let wasCalledContainer = { calledWith: undefined };
-    let reporter = function(cont) {
-        let container = cont;
-        return function(line) {
-            container.calledWith = line;
-        };
-    } (wasCalledContainer);
+    let messages = _fetchLogMessagesFrom(function() {
+        Coverage._incrementExpressionCounters(expressionCounters, 'script', 2);
+    });
 
-    Coverage._incrementExpressionCounters(expressionCounters, 2, reporter);
-    JSUnit.assertEquals(wasCalledContainer.calledWith, 2);
+    JSUnit.assertEquals(messages[0],
+                        "script:2 Executed line previously marked " +
+                        "non-executable by Reflect");
     JSUnit.assertEquals(expressionCounters[2], 1);
 }
 
@@ -1146,10 +1272,22 @@ function testBranchTrackerFindsNextBranch() {
 }
 
 function testConvertFunctionCountersToArray() {
-    let functionsMap = {};
-
-    functionsMap['(anonymous):2:0'] = { hitCount: 1 };
-    functionsMap['name:1:0'] = { hitCount: 0 };
+    let functionsMap = {
+        '(anonymous)': {
+            '2': {
+                '0': {
+                    hitCount: 1
+                },
+            },
+        },
+        'name': {
+            '1': {
+                '0': {
+                    hitCount: 0
+                },
+            },
+        }
+    };
 
     let expectedFunctionCountersArray = [
         { name: '(anonymous):2:0', hitCount: 1 },
@@ -1167,10 +1305,22 @@ function testConvertFunctionCountersToArray() {
 }
 
 function testConvertFunctionCountersToArrayIsSorted() {
-    let functionsMap = {};
-
-    functionsMap['name:1:0'] = { hitCount: 0 };
-    functionsMap['(anonymous):2:0'] = { hitCount: 1 };
+    let functionsMap = {
+        '(anonymous)': {
+            '2': {
+                '0': {
+                    hitCount: 1
+                },
+            },
+        },
+        'name': {
+            '1': {
+                '0': {
+                    hitCount: 0
+                },
+            },
+        }
+    };
 
     let expectedFunctionCountersArray = [
         { name: '(anonymous):2:0', hitCount: 1 },
@@ -1213,11 +1363,11 @@ Coverage.getFileContents = function(filename) {
 
 Coverage.getFileChecksum = function(filename) {
     return "abcd";
-}
+};
 
 Coverage.getFileModificationTime = function(filename) {
     return [1, 2];
-}
+};
 
 function testCoverageStatisticsContainerFetchesValidStatisticsForFile() {
     let container = new Coverage.CoverageStatisticsContainer(MockFilenames);

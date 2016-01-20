@@ -1,11 +1,34 @@
-gjs (1.43.3-1endless1) unstable; urgency=medium
+gjs (1.44.0-0) unstable; urgency=medium
 
-  * Move to upstream release 1.43.3
-  * Re-apply patches for loading our overrides from /usr/share
-  * Re-apply patches for https://bugzilla.gnome.org/show_bug.cgi?id=730101
-  * Re-apply coverage patches from upstream master
+  [ Philip Chimento ]
+  * debian/control: New upstream release 1.44.0. (Downgrade because of Jenkins.)
 
- -- Philip Chimento <philip@endlessm.com>  Thu, 11 Jun 2015 12:12:25 -0700
+  [ Cosimo Cecchi ]
+  * debian/control: Re-apply "Add gir1.2-gtk-3.0 runtime dependency to libgjs0e"
+
+  [ Dan Nicholson ]
+  * debian/control: Re-apply "Add debug package"
+
+ -- Philip Chimento <philip@endlessm.com>  Wed, 20 Jan 2016 15:14:09 -0800
+
+gjs (1.44.0-1) unstable; urgency=medium
+
+  [ Tim Lunn ]
+  * debian/control.in: libgjs-dev add dep on gjs, so GNOME apps can
+    pick up the path at build-time (Closes: #803215)
+
+  [ Michael Biebl ]
+  * New upstream release.
+  * Drop debian/patches/0001-tests-Run-under-Xvfb.patch, merged upstream.
+
+ -- Michael Biebl <biebl@debian.org>  Thu, 29 Oct 2015 02:41:13 +0100
+
+gjs (1.43.3-2) unstable; urgency=medium
+
+  * Upload to unstable.
+  * Update Homepage.
+
+ -- Michael Biebl <biebl@debian.org>  Sat, 20 Jun 2015 16:23:26 +0200
 
 gjs (1.43.3-1) experimental; urgency=medium
 
@@ -90,20 +113,6 @@ gjs (1.40.1-1) experimental; urgency=medium
   * New upstream release.
 
  -- Andreas Henriksson <andreas@fatal.se>  Fri, 09 May 2014 19:41:11 +0200
-
-gjs (1.40.1-0endless2) unstable; urgency=low
-
-  * debian/patches/endless-load-from-share.patch:
-    Still load JS from /usr/share. We use it in the SDK.
-
- -- Cosimo Cecchi <cosimo@endlessm.com>  Tue, 22 Apr 2014 18:37:03 -0700
-
-gjs (1.40.1-0endless1) unstable; urgency=low
-
-  * New upstream release
-  * Apply back automatic GC patches.
-
- -- Cosimo Cecchi <cosimo@endlessm.com>  Mon, 21 Apr 2014 11:38:42 -0700
 
 gjs (1.40.0-1) experimental; urgency=medium
 

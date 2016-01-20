@@ -2,7 +2,7 @@ Source: gjs
 Section: interpreters
 Priority: optional
 Maintainer: Debian GNOME Maintainers <pkg-gnome-maintainers@lists.alioth.debian.org>
-Uploaders: Andreas Henriksson <andreas@fatal.se>, Iain Lane <laney@debian.org>, Michael Biebl <biebl@debian.org>, Sjoerd Simons <sjoerd@debian.org>
+Uploaders: Andreas Henriksson <andreas@fatal.se>, Iain Lane <laney@debian.org>, Michael Biebl <biebl@debian.org>
 Build-Depends: debhelper (>= 9),
                cdbs,
                gnome-common,
@@ -23,10 +23,9 @@ Build-Depends: debhelper (>= 9),
                at-spi2-core,
                xvfb
 Standards-Version: 3.9.6
-Vcs-Svn: svn://anonscm.debian.org/pkg-gnome/desktop/experimental/gjs
-Vcs-Browser: http://anonscm.debian.org/viewvc/pkg-gnome/desktop/experimental/gjs
-Homepage: https://wiki.gnome.org/Gjs
-XS-Testsuite: autopkgtest
+Vcs-Svn: svn://anonscm.debian.org/pkg-gnome/desktop/unstable/gjs
+Vcs-Browser: https://anonscm.debian.org/viewvc/pkg-gnome/desktop/unstable/gjs
+Homepage: https://wiki.gnome.org/Projects/Gjs
 
 Package: gjs
 Architecture: any
@@ -73,6 +72,7 @@ Package: libgjs-dev
 Architecture: any
 Section: libdevel
 Depends: ${misc:Depends},
+         gjs,
          libgjs0e (= ${binary:Version}),
          libgirepository1.0-dev (>= 1.41.4),
          libmozjs-24-dev

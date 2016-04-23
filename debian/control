@@ -17,7 +17,7 @@ Build-Depends: debhelper (>= 9),
                libreadline-dev,
                dbus-x11,
                uuid-runtime,
-               libgtk-3-dev,
+               libgtk-3-dev (>= 3.20),
                libcairo2-dev,
 # test deps
                at-spi2-core,
@@ -42,7 +42,7 @@ Package: gjs-tests
 Architecture: any
 Depends: ${shlibs:Depends},
          ${misc:Depends},
-         gir1.2-gtk-3.0,
+         gir1.2-gtk-3.0  (>= 3.20),
          at-spi2-core
 Description: Mozilla-based javascript bindings for the GNOME platform
  Makes it possible for applications to use all of GNOME's platform
@@ -57,7 +57,7 @@ Architecture: any
 Section: libs
 Depends: ${shlibs:Depends},
          ${misc:Depends},
-         gir1.2-gtk-3.0
+         gir1.2-gtk-3.0 (>= 3.20)
 Conflicts: libgjs0, libgjs0a, libgjs0b, libgjs0c, libgjs0d
 Replaces: libgjs0, libgjs0a, libgjs0b, libgjs0c, libgjs0d
 Provides: ${gjs:Provides}

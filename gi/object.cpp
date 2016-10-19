@@ -247,6 +247,18 @@ proto_priv_from_js(JSContext *context,
     return priv_from_js(context, proto);
 }
 
+static gchar *
+hyphen_to_underscore (gchar *string)
+{
+    gchar *str, *s;
+    str = s = g_strdup(string);
+    while (*(str++) != '\0') {
+        if (*str == '-')
+            *str = '_';
+    }
+    return s;
+}
+
 /* a hook on getting a property; set value_p to override property's value.
  * Return value is JS_FALSE on OOM/exception.
  */
@@ -292,7 +304,18 @@ object_instance_get_prop(JSContext              *context,
     /* Do not fetch JS overridden properties from GObject, to avoid
      * infinite recursion. */
     if (g_param_spec_get_qdata(param, gjs_is_custom_property_quark()))
+      {
+        char *underscore_name;
+
+        gname = gjs_hyphen_from_camel(name);
+        underscore_name = hyphen_to_underscore(gname);
+        if (strcmp (underscore_name, name) == 0)
+          goto out;
+        JS_GetProperty(context, obj, underscore_name, value_p.address());
+        g_free(gname);
+        g_free(underscore_name);
         goto out;
+      }
 
     if ((param->flags & G_PARAM_READABLE) == 0)
         goto out;
@@ -2376,18 +2399,6 @@ gjs_hook_up_vfunc(JSContext *cx,
     g_base_info_unref(vfunc);
     g_free(name);
     return JS_TRUE;
-}
-
-static gchar *
-hyphen_to_underscore (gchar *string)
-{
-    gchar *str, *s;
-    str = s = g_strdup(string);
-    while (*(str++) != '\0') {
-        if (*str == '-')
-            *str = '_';
-    }
-    return s;
 }
 
 static void

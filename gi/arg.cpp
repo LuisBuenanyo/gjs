@@ -345,6 +345,20 @@ gjs_array_to_g_list(JSContext   *context,
     return JS_TRUE;
 }
 
+static GHashTable *
+create_hash_table_for_key_type(GITypeInfo  *key_param_info)
+{
+    /* Don't use key/value destructor functions here, because we can't
+     * construct correct ones in general if the value type is complex.
+     * Rely on the type-aware g_argument_release functions. */
+
+    GITypeTag key_type = g_type_info_get_tag(key_param_info);
+
+    if (key_type == GI_TYPE_TAG_UTF8 || key_type == GI_TYPE_TAG_FILENAME)
+        return g_hash_table_new(g_str_hash, g_str_equal);
+    return g_hash_table_new(g_direct_hash, g_direct_equal);
+}
+
 static JSBool
 gjs_object_to_g_hash(JSContext   *context,
                      jsval        hash_value,
@@ -379,10 +393,7 @@ gjs_object_to_g_hash(JSContext   *context,
     if (!ids)
         return false;
 
-    /* Don't use key/value destructor functions here, because we can't
-     * construct correct ones in general if the value type is complex.
-     * Rely on the type-aware g_argument_release functions. */
-   result = g_hash_table_new(g_str_hash, g_str_equal);
+    result = create_hash_table_for_key_type(key_param_info);
 
     for (id_ix = 0, id_len = ids.length(); id_ix < id_len; id_ix++) {
         jsval key_js, val_js;

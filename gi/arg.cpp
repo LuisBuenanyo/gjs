@@ -355,8 +355,7 @@ gjs_object_to_g_hash(JSContext   *context,
 {
     GHashTable *result = NULL;
     JSObject *props;
-    JSObject *iter;
-    jsid prop_id;
+    size_t id_ix, id_len;
 
     g_assert(JSVAL_IS_OBJECT(hash_value));
     props = JSVAL_TO_OBJECT(hash_value);
@@ -376,24 +375,20 @@ gjs_object_to_g_hash(JSContext   *context,
         transfer = GI_TRANSFER_NOTHING;
     }
 
-    iter = JS_NewPropertyIterator(context, props);
-    if (iter == NULL)
-        return JS_FALSE;
-
-    prop_id = JSID_VOID;
-    if (!JS_NextProperty(context, iter, &prop_id))
-        return JS_FALSE;
+    JS::AutoIdArray ids(context, JS_Enumerate(context, props));
+    if (!ids)
+        return false;
 
     /* Don't use key/value destructor functions here, because we can't
      * construct correct ones in general if the value type is complex.
      * Rely on the type-aware g_argument_release functions. */
    result = g_hash_table_new(g_str_hash, g_str_equal);
 
-   while (!JSID_IS_VOID(prop_id)) {
+    for (id_ix = 0, id_len = ids.length(); id_ix < id_len; id_ix++) {
         jsval key_js, val_js;
         GArgument key_arg = { 0 }, val_arg = { 0 };
 
-        if (!JS_IdToValue(context, prop_id, &key_js))
+        if (!JS_IdToValue(context, ids[id_ix], &key_js))
             goto free_hash_and_fail;
 
         /* Type check key type. */
@@ -404,7 +399,7 @@ gjs_object_to_g_hash(JSContext   *context,
                                      &key_arg))
             goto free_hash_and_fail;
 
-        if (!JS_GetPropertyById(context, props, prop_id, &val_js))
+        if (!JS_GetPropertyById(context, props, ids[id_ix], &val_js))
             goto free_hash_and_fail;
 
         /* Type check and convert value to a c type */
@@ -416,10 +411,6 @@ gjs_object_to_g_hash(JSContext   *context,
             goto free_hash_and_fail;
 
         g_hash_table_insert(result, key_arg.v_pointer, val_arg.v_pointer);
-
-        prop_id = JSID_VOID;
-        if (!JS_NextProperty(context, iter, &prop_id))
-            goto free_hash_and_fail;
     }
 
     *hash_p = result;

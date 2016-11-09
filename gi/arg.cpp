@@ -356,7 +356,7 @@ create_hash_table_for_key_type(GITypeInfo  *key_param_info)
 
     if (key_type == GI_TYPE_TAG_UTF8 || key_type == GI_TYPE_TAG_FILENAME)
         return g_hash_table_new(g_str_hash, g_str_equal);
-    return g_hash_table_new(g_direct_hash, g_direct_equal);
+    return g_hash_table_new(g_direct_hash, NULL);
 }
 
 /* Converts a JS::Value to a GHashTable key, stuffing it into @pointer_out if

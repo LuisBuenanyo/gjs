@@ -1,15 +1,66 @@
-gjs (1.44.0-0) unstable; urgency=medium
+gjs (1.46.0-1endless1) unstable; urgency=medium
 
   [ Philip Chimento ]
-  * debian/control: New upstream release 1.44.0. (Downgrade because of Jenkins.)
+  * debian/control{,.in}, debian/compat, debian/copyright, debian/rules,
+    debian/tests/installed-tests, debian/watch: New upstream release 1.46.0,
+    taken from Debian Stretch.
 
   [ Cosimo Cecchi ]
-  * debian/control: Re-apply "Add gir1.2-gtk-3.0 runtime dependency to libgjs0e"
+  * debian/control{,.in}: Re-apply "Add gir1.2-gtk-3.0 runtime dependency to
+    libgjs0e"
 
   [ Dan Nicholson ]
-  * debian/control: Re-apply "Add debug package"
+  * debian/control{,.in}: Re-apply "Add debug package"
 
- -- Philip Chimento <philip@endlessm.com>  Wed, 20 Jan 2016 15:14:09 -0800
+  [ Matt Watson ]
+  * debian/control{,.in}: Re-apply "control: depend on gtk 3.20"
+
+ -- Philip Chimento <philip@endlessm.com>  Mon, 12 Dec 2016 14:13:54 -0800
+
+gjs (1.46.0-1) unstable; urgency=medium
+
+  * New upstream release.
+  * Convert from cdbs to dh.
+  * Bump debhelper compat level to 10.
+  * Mark test dependencies with <!nocheck>.
+
+ -- Michael Biebl <biebl@debian.org>  Tue, 20 Sep 2016 23:39:45 +0200
+
+gjs (1.45.4-2) unstable; urgency=medium
+
+  * debian/control{,.in}: Have gjs-tests depend on gjs, since
+    gjs/testSystemExit.test requires the gjs binary.
+  * debian/tests/installed-tests: Always run in C
+
+ -- Iain Lane <laney@debian.org>  Thu, 01 Sep 2016 17:46:52 +0100
+
+gjs (1.45.4-1) unstable; urgency=medium
+
+  * New upstream release.
+  * Replace Build-Depends on uuid-runtime with dbus (for dbus-uuidgen).
+  * Explicitly enable tests which require dbus and Xvfb.
+  * Bump Standards-Version to 3.9.8.
+
+ -- Michael Biebl <biebl@debian.org>  Thu, 28 Jul 2016 20:45:55 +0200
+
+gjs (1.45.3-2) unstable; urgency=medium
+
+  * Upload to unstable.
+  * Make test suite failures non-fatal again and dump the log files to stdout
+    if the test suite fails. There are currently known failing tests which
+    might point to real issues, but there is no fix available (yet) and this
+    blocks important fixes in other packages from entering testing. So this is
+    the lesser of two evils.
+
+ -- Michael Biebl <biebl@debian.org>  Wed, 11 May 2016 21:02:07 +0200
+
+gjs (1.45.3-1) experimental; urgency=medium
+
+  * New upstream development release.
+  * Bump glib build-dependency to >= 2.42.0 according to configure.ac changes.
+  * Upload to experimental.
+
+ -- Andreas Henriksson <andreas@fatal.se>  Tue, 01 Mar 2016 18:10:13 +0100
 
 gjs (1.44.0-1) unstable; urgency=medium
 

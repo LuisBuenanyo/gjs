@@ -1,3 +1,13 @@
+gjs (1.47.3-0) unstable; urgency=medium
+
+  * New upstream release.
+  * debian/control{,.in}: Depend on GLib 2.50 and mozjs31.
+  * debian/control{,.in}: Remove dependency of libgjs-dev on libmozjs-31-dev,
+    since SpiderMonkey isn't exposed in the API anymore.
+  * Downgrade release to 0 because of Jenkins.
+
+ -- Philip Chimento <philip@endless>  Mon, 12 Dec 2016 14:26:19 -0800
+
 gjs (1.46.0-1endless1) unstable; urgency=medium
 
   [ Philip Chimento ]

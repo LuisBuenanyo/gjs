@@ -1,3 +1,10 @@
+gjs (1.47.3-0endless1) unstable; urgency=medium
+
+  * debian/control{,.in}: Remove <!nocheck> from dependencies as our OBS
+    instance doesn't seem to like it.
+
+ -- Philip Chimento <philip@endlessm.com>  Thu, 22 Dec 2016 14:09:06 -0700
+
 gjs (1.47.3-0) unstable; urgency=medium
 
   * New upstream release.

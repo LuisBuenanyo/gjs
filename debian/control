@@ -76,7 +76,8 @@ Section: libdevel
 Depends: ${misc:Depends},
          gjs,
          libgjs0e (= ${binary:Version}),
-         libgirepository1.0-dev (>= 1.41.4)
+         libgirepository1.0-dev (>= 1.41.4),
+         libmozjs-31-dev
 Description: Mozilla-based javascript bindings for the GNOME platform
  Makes it possible for applications to use all of GNOME's platform
  libraries using the Javascript language. It's mainly based on the

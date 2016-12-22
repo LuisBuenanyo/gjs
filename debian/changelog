@@ -1,3 +1,11 @@
+gjs (1.47.3-0endless2) unstable; urgency=medium
+
+  * debian/control{,.in}: Reinstate dependency of libgjs-dev on
+    libmozjs-31-dev, it was a mistake to remove it because it's still
+    needed when you link statically.
+
+ -- Philip Chimento <philip@endless>  Thu, 22 Dec 2016 14:51:16 -0700
+
 gjs (1.47.3-0endless1) unstable; urgency=medium
 
   * debian/control{,.in}: Remove <!nocheck> from dependencies as our OBS

@@ -71,6 +71,7 @@ Architecture: any
 Section: libdevel
 Depends: ${misc:Depends},
          gjs,
+         libcairo2-dev,
          libgjs0e (= ${binary:Version}),
          libgirepository1.0-dev (>= 1.41.4),
          libmozjs-31-dev

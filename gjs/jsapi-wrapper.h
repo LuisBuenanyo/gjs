@@ -35,6 +35,7 @@
 #pragma GCC system_header
 #endif
 #include <jsapi.h>
+#include <jsfriendapi.h>
 #include <js/OldDebugAPI.h>  /* Needed by some bits */
 
 #endif  /* GJS_JSAPI_WRAPPER_H */
